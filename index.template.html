@@ -1,0 +1,2192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23050a16'/%3E%3Cpath d='M7 22 L13 9 L25 13 L19 25 Z' fill='none' stroke='%2322d3ee' stroke-width='2.4' stroke-linejoin='round'/%3E%3Ccircle cx='7' cy='22' r='2.6' fill='%234ade80'/%3E%3Ccircle cx='13' cy='9' r='2.6' fill='%23f5a623'/%3E%3Ccircle cx='25' cy='13' r='2.6' fill='%23e879f9'/%3E%3Ccircle cx='19' cy='25' r='2.6' fill='%23f5f7fa'/%3E%3C/svg%3E">
+<title>TSP Theater — Singapore MRT</title>
+<style>
+:root{
+  --bg:#050a16; --bg2:#0a1428; --panel:#0c1526; --panel2:#101c33;
+  --line:rgba(148,180,255,.14); --text:#dfe8f8; --muted:#8fa2c2; --faint:#5d6f8f;
+  --brute:#f5f7fa; --nn:#f5a623; --twoopt:#22d3ee; --sa:#e879f9; --exact:#4ade80;
+  --router:#fb7185;
+  --red:#f87171; --accent:#22d3ee;
+}
+*{box-sizing:border-box; margin:0; padding:0}
+html,body{height:100%}
+body{
+  background:radial-gradient(1200px 700px at 70% -10%, #0d1a36 0%, var(--bg) 55%) fixed, var(--bg);
+  color:var(--text);
+  font:15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  display:flex; flex-direction:column; min-height:100vh; overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit; color:inherit; background:none; border:none; cursor:pointer}
+input,select{font:inherit; color:var(--text)}
+sup{font-size:.62em}
+sub{font-size:.62em}
+
+header{display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:14px 20px 10px; flex-wrap:wrap}
+.brand h1{font-size:21px; font-weight:800; letter-spacing:.4px}
+.brand h1 em{font-style:normal; color:var(--accent)}
+.brand .tag{font-size:12px; color:var(--muted); margin-top:1px}
+#test-badge{font-size:12px; font-weight:700; padding:5px 12px; border-radius:999px;
+  border:1px solid var(--line); background:var(--panel); cursor:pointer; white-space:nowrap}
+#test-badge.pass{color:var(--exact); border-color:rgba(74,222,128,.4)}
+#test-badge.fail{color:var(--red); border-color:rgba(248,113,113,.4)}
+
+nav#scenes{display:flex; gap:8px; padding:0 20px 12px; overflow-x:auto; scrollbar-width:none}
+nav#scenes::-webkit-scrollbar{display:none}
+.scene-tab{display:flex; align-items:center; gap:8px; padding:8px 14px; border-radius:12px;
+  border:1px solid var(--line); background:var(--panel); color:var(--muted);
+  font-size:13px; font-weight:600; white-space:nowrap; transition:all .18s ease}
+.scene-tab .num{display:inline-flex; align-items:center; justify-content:center;
+  width:20px; height:20px; border-radius:6px; font-size:11px; font-weight:800;
+  background:rgba(148,180,255,.1); color:var(--muted)}
+.scene-tab:hover{border-color:rgba(148,180,255,.32); color:var(--text)}
+.scene-tab.active{color:#04101f; border-color:transparent}
+.scene-tab.active .num{background:rgba(0,0,0,.22); color:inherit}
+.scene-tab.active[data-scene="1"]{background:var(--brute)}
+.scene-tab.active[data-scene="2"]{background:var(--nn)}
+.scene-tab.active[data-scene="3"]{background:var(--twoopt)}
+.scene-tab.active[data-scene="4"]{background:var(--sa)}
+.scene-tab.active[data-scene="5"]{background:var(--exact)}
+.scene-tab.active[data-scene="6"]{background:var(--router)}
+
+main{flex:1; display:grid; grid-template-columns:minmax(0,1fr) 372px; gap:14px;
+  padding:0 20px 12px; min-height:0}
+#stage-wrap{display:flex; flex-direction:column; min-width:0; border:1px solid var(--line);
+  border-radius:16px; overflow:hidden; background:linear-gradient(180deg,#081124 0%, #060d1d 100%)}
+#ticker-bar{display:flex; align-items:baseline; gap:14px; padding:12px 18px;
+  border-bottom:1px solid var(--line); background:rgba(10,18,38,.6); flex-wrap:wrap}
+#ticker{font-size:34px; font-weight:800; letter-spacing:-.5px; font-variant-numeric:tabular-nums;
+  line-height:1.05; transition:color .3s}
+#ticker .unit{font-size:15px; font-weight:600; color:var(--muted); margin-left:5px}
+#ticker-meta{display:flex; flex-direction:column; gap:1px; min-width:0}
+#ticker-label{font-size:11px; color:var(--faint); text-transform:uppercase; letter-spacing:.8px}
+#ticker-status{font-size:12.5px; color:var(--muted); font-weight:600}
+#stage-box{position:relative; flex:1; min-height:340px}
+#stage{position:absolute; inset:0; width:100%; height:100%; display:block; cursor:crosshair; touch-action:manipulation}
+#tooltip{position:absolute; z-index:5; pointer-events:none; background:rgba(8,14,30,.94);
+  border:1px solid rgba(148,180,255,.25); border-radius:9px; padding:6px 10px; font-size:12px;
+  line-height:1.35; max-width:230px; box-shadow:0 6px 18px rgba(0,0,0,.5)}
+#tooltip .tt-name{font-weight:700}
+#tooltip .tt-sub{color:var(--muted); font-size:11px}
+#map-hint{position:absolute; left:12px; bottom:10px; font-size:11px; color:var(--faint);
+  pointer-events:none; background:rgba(6,11,24,.55); padding:3px 9px; border-radius:8px}
+
+aside#panel{display:flex; flex-direction:column; gap:12px; min-width:0; overflow-y:auto;
+  max-height:calc(100vh - 210px); scrollbar-width:thin; padding-right:2px}
+.card{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:16px 18px}
+.card h3{font-size:11px; text-transform:uppercase; letter-spacing:1.1px; color:var(--faint);
+  font-weight:700; margin-bottom:10px}
+.big-stat{font-size:38px; font-weight:800; letter-spacing:-.5px; line-height:1.1;
+  font-variant-numeric:tabular-nums; overflow-wrap:anywhere}
+.big-stat sup{font-size:.5em}
+.stat-sub{font-size:12.5px; color:var(--muted); margin-top:5px}
+.stat-row{display:flex; justify-content:space-between; gap:10px; font-size:13px;
+  padding:4px 0; border-bottom:1px dashed rgba(148,180,255,.08)}
+.stat-row:last-child{border-bottom:none}
+.stat-row .k{color:var(--muted)}
+.stat-row .v{font-weight:700; font-variant-numeric:tabular-nums; text-align:right}
+.progress{height:7px; border-radius:99px; background:rgba(148,180,255,.1); overflow:hidden; margin-top:10px}
+.progress .fill{height:100%; width:0%; border-radius:99px; transition:width .15s linear}
+.caption{font-size:12.5px; color:var(--muted); margin-top:10px; padding:9px 12px;
+  border-left:3px solid var(--accent); background:rgba(148,180,255,.05); border-radius:0 9px 9px 0}
+.caption.warn{border-left-color:var(--nn)}
+.caption.good{border-left-color:var(--exact)}
+#explainer p{font-size:13.5px; color:var(--text); margin-bottom:8px}
+#explainer .cx{display:inline-block; font-size:12px; font-weight:700; color:var(--accent);
+  background:rgba(34,211,238,.08); border:1px solid rgba(34,211,238,.22);
+  padding:3px 10px; border-radius:999px}
+.ctl-row{display:flex; align-items:center; gap:10px; margin:9px 0; font-size:12.5px}
+.ctl-row label{color:var(--muted); min-width:86px; font-weight:600}
+.ctl-row output{font-weight:700; font-variant-numeric:tabular-nums; min-width:56px; text-align:right}
+.btn{padding:8px 16px; border-radius:11px; border:1px solid var(--line); background:var(--panel2);
+  font-weight:700; font-size:13px; transition:all .15s ease; color:var(--text)}
+.btn:hover:not(:disabled){border-color:rgba(148,180,255,.4); transform:translateY(-1px)}
+.btn:disabled{opacity:.4; cursor:not-allowed}
+.btn.primary{background:var(--accent); color:#04101f; border-color:transparent}
+.btn-row{display:flex; gap:8px; flex-wrap:wrap; margin-top:6px}
+
+/* thermometer */
+#thermo-wrap{display:flex; gap:16px; align-items:stretch}
+#thermo{position:relative; width:26px; min-height:150px; border-radius:99px;
+  background:rgba(148,180,255,.08); border:1px solid var(--line); overflow:hidden; flex:none}
+#thermo .merc{position:absolute; bottom:0; left:0; right:0;
+  background:linear-gradient(180deg, var(--sa) 0%, #7c3aed 100%);
+  border-radius:99px 99px 0 0; transition:height .12s linear}
+#thermo .tick{position:absolute; left:0; right:0; height:1px; background:rgba(223,232,248,.25)}
+#thermo-info{flex:1; min-width:0}
+#move-log{font-size:12px; color:var(--muted); margin-top:8px; min-height:34px;
+  font-variant-numeric:tabular-nums}
+#move-log .up{color:var(--nn); font-weight:700}
+#move-log .down{color:var(--twoopt); font-weight:700}
+#move-log .rej{color:var(--red); font-weight:700}
+
+/* leaderboard */
+#board{display:flex; flex-direction:column; gap:9px}
+.board-row{display:grid; grid-template-columns:104px 1fr auto; gap:9px; align-items:center; font-size:12px}
+.board-row .bname{color:var(--muted); font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.board-row .btrack{height:16px; background:rgba(148,180,255,.07); border-radius:5px; overflow:hidden; position:relative}
+.board-row .bbar{height:100%; width:0%; border-radius:5px; transition:width .9s cubic-bezier(.22,1,.36,1)}
+.board-row .bref{position:absolute; top:0; bottom:0; width:2px; background:rgba(74,222,128,.85); box-shadow:0 0 6px rgba(74,222,128,.7)}
+.board-row .bval{font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap}
+.board-row .bgap{font-size:11px; font-weight:700; padding:1px 7px; border-radius:99px; margin-left:6px}
+.bgap.ok{color:var(--exact); background:rgba(74,222,128,.12)}
+.bgap.off{color:var(--nn); background:rgba(245,166,35,.12)}
+.bgap.na{color:var(--faint); background:rgba(148,180,255,.08)}
+
+/* route race (scene 6) */
+#rr-table{display:flex; flex-direction:column; gap:9px; margin-top:4px}
+.rr-row{display:grid; grid-template-columns:92px 1fr auto; gap:8px; align-items:center; font-size:12px}
+.rr-row .rname{font-weight:700; color:var(--muted); white-space:nowrap}
+.rr-row.win .rname{color:var(--text)}
+.rr-row .rtrack{height:14px; background:rgba(148,180,255,.07); border-radius:5px; overflow:hidden}
+.rr-row .rfill{height:100%; width:0%; border-radius:5px; transition:width .18s linear}
+.rr-row .rval{font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; font-size:11.5px}
+#rr-route{font-size:12.5px; line-height:1.8; margin-top:6px}
+#rr-route .stop{white-space:nowrap}
+.line-chip{display:inline-block; font-size:9.5px; font-weight:800; padding:0 5px; border-radius:5px;
+  color:#04101f; margin:0 3px; vertical-align:1px}
+.xfer-mark{color:var(--nn); font-weight:800; margin:0 2px}
+.seg-btns{display:flex; gap:6px; flex-wrap:wrap; margin:6px 0 10px}
+.seg{padding:6px 11px; border-radius:9px; border:1px solid var(--line); background:var(--panel2);
+  font-size:11.5px; font-weight:700; color:var(--muted); transition:all .15s ease}
+.seg.active{background:var(--router); color:#20060c; border-color:transparent}
+select.rr-select{width:100%; padding:7px 9px; border-radius:9px; border:1px solid var(--line);
+  background:var(--panel2); font-size:12.5px; font-weight:600; margin-top:3px}
+.ctl-col{display:flex; flex-direction:column; gap:2px; margin:8px 0}
+.ctl-col label{color:var(--muted); font-size:12px; font-weight:600}
+
+footer#controls{display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  padding:12px 20px 16px; border-top:1px solid var(--line); background:rgba(8,14,30,.72);
+  backdrop-filter:blur(8px); position:sticky; bottom:0; z-index:10}
+.transport{display:flex; gap:7px}
+.tbtn{width:42px; height:42px; border-radius:12px; border:1px solid var(--line);
+  background:var(--panel2); font-size:16px; display:flex; align-items:center; justify-content:center;
+  transition:all .15s ease}
+.tbtn:hover{border-color:rgba(148,180,255,.4); transform:translateY(-1px)}
+.tbtn.playing{background:var(--accent); color:#04101f; border-color:transparent}
+.slider-group{display:flex; align-items:center; gap:9px; font-size:12px; color:var(--muted)}
+.slider-group output{font-weight:800; color:var(--text); font-variant-numeric:tabular-nums; min-width:44px}
+input[type=range]{-webkit-appearance:none; appearance:none; height:5px; border-radius:99px;
+  background:rgba(148,180,255,.18); outline:none; cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; appearance:none; width:16px; height:16px;
+  border-radius:50%; background:var(--accent); border:2px solid #06101f; box-shadow:0 0 8px rgba(34,211,238,.6)}
+input[type=range]::-moz-range-thumb{width:14px; height:14px; border-radius:50%;
+  background:var(--accent); border:2px solid #06101f}
+#speed{width:110px}
+#city-slider{width:120px}
+#seed{width:76px; padding:7px 9px; border-radius:9px; border:1px solid var(--line);
+  background:var(--panel2); font-variant-numeric:tabular-nums; font-weight:700}
+#kbd-hint{font-size:11px; color:var(--faint); margin-left:auto}
+#toast{position:fixed; left:50%; bottom:86px; transform:translateX(-50%) translateY(20px);
+  background:rgba(10,17,34,.95); border:1px solid rgba(148,180,255,.3); color:var(--text);
+  padding:9px 18px; border-radius:12px; font-size:13px; font-weight:600; opacity:0;
+  transition:all .25s ease; pointer-events:none; z-index:50; max-width:86vw; text-align:center}
+#toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+
+@media (max-width:900px){
+  header{padding:12px 14px 8px}
+  nav#scenes{padding:0 14px 10px}
+  main{grid-template-columns:1fr; padding:0 14px 10px; gap:10px}
+  #stage-box{min-height:0; height:46vh}
+  aside#panel{max-height:none; overflow:visible}
+  #ticker{font-size:27px}
+  footer#controls{gap:10px; padding:10px 14px 14px}
+  #kbd-hint{display:none}
+  .slider-group{flex:1 1 auto}
+  #speed{width:84px}
+  #city-slider{width:96px}
+  .big-stat{font-size:31px}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>TSP <em>Theater</em></h1>
+    <div class="tag">The Traveling Salesman Problem on Singapore&rsquo;s MRT &middot; 213 stations, real coordinates</div>
+  </div>
+  <div id="test-badge" hidden></div>
+</header>
+
+<nav id="scenes" aria-label="Scenes">
+  <button class="scene-tab" data-scene="1"><span class="num">1</span> The Explosion</button>
+  <button class="scene-tab" data-scene="2"><span class="num">2</span> Nearest Neighbor</button>
+  <button class="scene-tab" data-scene="3"><span class="num">3</span> 2-opt</button>
+  <button class="scene-tab" data-scene="4"><span class="num">4</span> Annealing</button>
+  <button class="scene-tab" data-scene="5"><span class="num">5</span> The Exact Answer</button>
+  <button class="scene-tab" data-scene="6"><span class="num">6</span> Route Race</button>
+</nav>
+
+<main>
+  <section id="stage-wrap">
+    <div id="ticker-bar">
+      <div id="ticker">0.00<span class="unit">km</span></div>
+      <div id="ticker-meta">
+        <div id="ticker-label">tour length &middot; straight-line, as the crow flies</div>
+        <div id="ticker-status">ready</div>
+      </div>
+    </div>
+    <div id="stage-box">
+      <canvas id="stage"></canvas>
+      <div id="tooltip" hidden></div>
+      <div id="map-hint">click map: add city &middot; click city: remove</div>
+    </div>
+  </section>
+  <aside id="panel">
+    <div class="card" id="scene-stats"></div>
+    <div class="card" id="explainer-card"><h3>The idea</h3><div id="explainer"></div></div>
+    <div class="card" id="scene-controls-card"><h3>Scene controls</h3><div id="scene-controls"></div></div>
+  </aside>
+</main>
+
+<footer id="controls">
+  <div class="transport">
+    <button class="tbtn" id="btn-play" title="Play / pause (space)">&#9654;</button>
+    <button class="tbtn" id="btn-step" title="Single step (&rarr;)">&#9197;</button>
+    <button class="tbtn" id="btn-reset" title="Reset (R)">&#8634;</button>
+  </div>
+  <div class="slider-group"><label for="speed">speed</label>
+    <input type="range" id="speed" min="-2" max="3" step="0.25" value="0"><output id="speed-out">1×</output></div>
+  <div class="slider-group"><label for="city-slider">cities</label>
+    <input type="range" id="city-slider" min="5" max="20" step="1" value="12"><output id="city-out">12</output></div>
+  <div class="slider-group"><label for="seed">seed</label>
+    <input type="number" id="seed" value="42" min="0" step="1"></div>
+  <div id="kbd-hint">space play/pause &middot; &rarr; step &middot; 1&ndash;6 scenes &middot; R reset</div>
+</footer>
+<div id="toast"></div>
+
+<script>__DATA_JS__</script>
+<script>
+'use strict';
+/* ================================================================
+   TSP Theater — vanilla JS + Canvas 2D, zero dependencies.
+   All distances are haversine great-circle km ("as the crow flies"),
+   computed at runtime from real MRT station coordinates.
+   ================================================================ */
+const D = window.TSP_DATA;
+const $ = (s) => document.querySelector(s);
+const COLORS = { brute:'#f5f7fa', nn:'#f5a623', twoopt:'#22d3ee', sa:'#e879f9', exact:'#4ade80', router:'#fb7185' };
+const SCENE_COLOR = { 1:COLORS.brute, 2:COLORS.nn, 3:COLORS.twoopt, 4:COLORS.sa, 5:COLORS.exact, 6:COLORS.router };
+const SCENE_NAME = { 1:'Brute force', 2:'Nearest neighbor', 3:'2-opt local search', 4:'Simulated annealing', 5:'Held–Karp exact', 6:'Route race' };
+const MAX_CITIES = 24, MIN_CITIES = 4, HK_LIMIT = 15, ENUM_LIMIT = 8;
+const UNIVERSE_YEARS = 13.8e9;
+
+/* ---------------- math & formatting ---------------- */
+function mulberry32(seed){
+  let a = seed >>> 0;
+  return function(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function haversine(lat1, lon1, lat2, lon2){
+  const rad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * rad, dLon = (lon2 - lon1) * rad;
+  const h = Math.sin(dLat/2)**2 + Math.cos(lat1*rad)*Math.cos(lat2*rad)*Math.sin(dLon/2)**2;
+  return 2 * D.radiusKm * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+function buildMatrix(cities){
+  const n = cities.length, M = new Float64Array(n*n);
+  for (let i=0;i<n;i++) for (let j=i+1;j<n;j++){
+    const d = haversine(cities[i].lat, cities[i].lon, cities[j].lat, cities[j].lon);
+    M[i*n+j] = d; M[j*n+i] = d;
+  }
+  return M;
+}
+function tourCost(tour, M){
+  const n = tour.length; let s = 0;
+  for (let i=0;i<n;i++) s += M[tour[i]*n + tour[(i+1)%n]];
+  return s;
+}
+function pathCost(path, M){ // open path, no closing edge
+  const n = path.length; let s = 0;
+  for (let i=1;i<n;i++) s += M[path[i-1]*n + path[i]];
+  return s;
+}
+function isPermutation(tour, n){
+  if (!tour || tour.length !== n) return false;
+  const seen = new Uint8Array(n);
+  for (const v of tour){ if (!Number.isInteger(v) || v<0 || v>=n || seen[v]) return false; seen[v]=1; }
+  return true;
+}
+function fmtBig(n){
+  if (!isFinite(n)) return '∞';
+  if (n < 1e6) return Math.round(n).toLocaleString('en-US');
+  const e = Math.floor(Math.log10(n));
+  const m = n / Math.pow(10, e);
+  return m.toFixed(2) + '×10<sup>' + e + '</sup>';
+}
+function fmtTime(sec){
+  if (sec < 1e-3) return (sec*1e6).toFixed(1) + ' µs';
+  if (sec < 1) return (sec*1e3).toFixed(1) + ' ms';
+  if (sec < 60) return sec.toFixed(1) + ' s';
+  if (sec < 3600) return (sec/60).toFixed(1) + ' min';
+  if (sec < 86400) return (sec/3600).toFixed(1) + ' hours';
+  if (sec < 365.25*86400) return (sec/86400).toFixed(1) + ' days';
+  const yr = sec / (365.25*86400);
+  if (yr < 1000) return yr.toFixed(2) + ' years';
+  if (yr < 1e6) return (yr/1000).toFixed(1) + ' thousand years';
+  if (yr < 1e9) return (yr/1e6).toFixed(1) + ' million years';
+  if (yr < 1e12) return (yr/1e9).toFixed(2) + ' billion years';
+  return fmtBig(yr) + ' years';
+}
+function distinctTours(n){
+  let f = 1;
+  for (let k=2;k<=n-1;k++) f *= k;
+  return f/2;
+}
+const easeOutCubic = t => 1 - Math.pow(1-t, 3);
+const easeInOut = t => t<.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+function drain(gen){ for (const ev of gen){ if (ev.type === 'done') return ev; } return null; }
+/* ---------------- algorithms (pure; seeded wherever random) ---------------- */
+function* bruteGen(M, n){
+  // Fix city 0 first; keep only tours with tour[1] < tour[n-1] (one per direction)
+  // so the enumerated count is exactly (n-1)!/2 distinct loops.
+  const rest = []; for (let i=1;i<n;i++) rest.push(i);
+  let best = null, bestCost = Infinity, count = 0;
+  function* perms(k){
+    if (k === rest.length){ yield rest.slice(); return; }
+    for (let i=k;i<rest.length;i++){
+      [rest[k], rest[i]] = [rest[i], rest[k]];
+      yield* perms(k+1);
+      [rest[k], rest[i]] = [rest[i], rest[k]];
+    }
+  }
+  for (const p of perms(0)){
+    if (p[0] > p[p.length-1]) continue;
+    const tour = [0, ...p];
+    const c = tourCost(tour, M);
+    count++;
+    const isBest = c < bestCost - 1e-12;
+    if (isBest){ bestCost = c; best = tour; }
+    yield { type:'candidate', tour, cost:c, count, best, bestCost, isBest };
+  }
+  yield { type:'done', tour:best, cost:bestCost, count };
+}
+function nnFrom(M, n, start){
+  const vis = new Uint8Array(n), tour = [start]; vis[start] = 1;
+  let cur = start;
+  for (let k=1;k<n;k++){
+    let bj = -1, bd = Infinity;
+    for (let j=0;j<n;j++) if (!vis[j] && M[cur*n+j] < bd){ bd = M[cur*n+j]; bj = j; }
+    tour.push(bj); vis[bj] = 1; cur = bj;
+  }
+  return tour;
+}
+function* nnGen(M, n, start){
+  const tour = nnFrom(M, n, start);
+  for (let k=1;k<n;k++){
+    yield { type:'visit', from:tour[k-1], to:tour[k], km:M[tour[k-1]*n+tour[k]],
+            path:tour.slice(0,k+1) };
+  }
+  yield { type:'close', from:tour[n-1], to:tour[0], km:M[tour[n-1]*n+tour[0]], path:tour.slice() };
+  const edges = [];
+  for (let i=0;i<n;i++) edges.push({ i, km:M[tour[i]*n+tour[(i+1)%n]] });
+  const sorted = edges.map(e=>e.km).sort((a,b)=>a-b);
+  const med = sorted[Math.floor(sorted.length/2)];
+  const long = edges.filter(e => e.km > 1.55*med).map(e=>e.i);
+  yield { type:'done', tour, cost:tourCost(tour,M), longEdges:long, median:med, start };
+}
+function shuffledTour(n, rng){
+  const t = []; for (let i=0;i<n;i++) t.push(i);
+  for (let i=n-1;i>0;i--){ const j = Math.floor(rng()*(i+1)); [t[i],t[j]]=[t[j],t[i]]; }
+  return t;
+}
+function reverseSeg(tour, i, j){ return tour.slice(0,i).concat(tour.slice(i,j+1).reverse(), tour.slice(j+1)); }
+function* twoOptGen(M, n, tour0){
+  let tour = tour0.slice(), cost = tourCost(tour, M), swaps = 0;
+  for(;;){
+    let mv = null;
+    outer:
+    for (let i=0;i<n-1;i++) for (let j=i+1;j<n;j++){
+      if (i===0 && j===n-1) continue; // whole-loop reversal is the same cycle
+      const a=tour[(i-1+n)%n], b=tour[i], c=tour[j], d=tour[(j+1)%n];
+      const delta = M[a*n+c] + M[b*n+d] - M[a*n+b] - M[c*n+d];
+      if (delta < -1e-10){ mv = {i,j,a,b,c,d}; break outer; }
+    }
+    if (!mv){ yield { type:'done', tour, cost, swaps }; return; }
+    const nt = reverseSeg(tour, mv.i, mv.j);
+    const nc = tourCost(nt, M);
+    swaps++;
+    yield { type:'swap', i:mv.i, j:mv.j,
+            removed:[[mv.a,mv.b],[mv.c,mv.d]], added:[[mv.a,mv.c],[mv.b,mv.d]],
+            oldCost:cost, newCost:nc, delta:nc-cost, tour:nt, swaps };
+    tour = nt; cost = nc;
+  }
+}
+function twoOptImprove(M, tour){ // exhaustive best-improvement scan (test oracle)
+  const n = tour.length; let best = null;
+  for (let i=0;i<n-1;i++) for (let j=i+1;j<n;j++){
+    if (i===0 && j===n-1) continue;
+    const a=tour[(i-1+n)%n], b=tour[i], c=tour[j], d=tour[(j+1)%n];
+    const delta = M[a*n+c]+M[b*n+d]-M[a*n+b]-M[c*n+d];
+    if (delta < -1e-10 && (!best || delta < best.delta)) best = {delta,i,j};
+  }
+  return best;
+}
+function saProb(delta, T){ return delta <= 0 ? 1 : Math.exp(-delta/T); }
+function saAccept(delta, T, u){ return u < saProb(delta, T); }
+function* saGen(M, n, tour0, rng, T0, rate, Tmin){
+  let tour = tour0.slice(), cost = tourCost(tour, M);
+  let best = tour.slice(), bestCost = cost;
+  let T = T0, k = 0, acc = 0, up = 0, rej = 0;
+  const totalMoves = Math.max(1, Math.ceil(Math.log(Tmin/T0)/Math.log(rate)));
+  while (T > Tmin){
+    let i = Math.floor(rng()*n), j = Math.floor(rng()*n);
+    if (i > j) [i,j] = [j,i];
+    if (i === j) j = (i+1) % n;
+    if (i === 0 && j === n-1) j = n-2;
+    if (i > j) [i,j] = [j,i];
+    const a=tour[(i-1+n)%n], b=tour[i], c=tour[j], d=tour[(j+1)%n];
+    const delta = M[a*n+c]+M[b*n+d]-M[a*n+b]-M[c*n+d];
+    const p = saProb(delta, T);
+    const u = rng();
+    const accept = saAccept(delta, T, u);
+    const kind = accept ? (delta <= 0 ? 'down' : 'up') : 'reject';
+    let newCost = cost;
+    if (accept){
+      tour = reverseSeg(tour, i, j);
+      newCost = tourCost(tour, M);
+      acc++; if (delta > 0) up++;
+      if (newCost < bestCost){ bestCost = newCost; best = tour.slice(); }
+    } else rej++;
+    k++;
+    yield { type:'move', k, T, delta, p, u, accept, kind, i, j,
+            tour: accept ? tour.slice() : null, cost:newCost, best, bestCost,
+            acc, up, rej, totalMoves };
+    cost = newCost;
+    T *= rate;
+  }
+  yield { type:'done', tour, cost, best, bestCost, moves:k, acc, up, rej };
+}
+function* hkGen(M, n, chunk){
+  // Held–Karp bitmask DP. City 0 is the fixed start; masks cover cities 1..n-1.
+  // dp[mask*m+j] = cheapest path 0 -> (subset mask) ending at city j+1.
+  const m = n - 1, size = 1 << m;
+  const dp = new Float64Array(size*m).fill(Infinity);
+  const par = new Int8Array(size*m).fill(-1);
+  for (let j=0;j<m;j++) dp[(1<<j)*m + j] = M[j+1];
+  let processed = 0;
+  for (let mask=1; mask<size; mask++){
+    for (let j=0;j<m;j++){
+      if (!(mask & (1<<j))) continue;
+      const pm = mask ^ (1<<j);
+      if (pm === 0) continue; // single-bit base case already set
+      let bv = Infinity, bk = -1;
+      for (let k=0;k<m;k++){
+        if (!(pm & (1<<k))) continue;
+        const v = dp[pm*m+k] + M[(k+1)*n + (j+1)];
+        if (v < bv){ bv = v; bk = k; }
+      }
+      if (bv < dp[mask*m+j]){ dp[mask*m+j] = bv; par[mask*m+j] = bk; }
+    }
+    processed++;
+    if (chunk > 0 && processed % chunk === 0)
+      yield { type:'progress', processed, total:size-1 };
+  }
+  const full = size - 1;
+  let bj = -1, bc = Infinity;
+  for (let j=0;j<m;j++){
+    const v = dp[full*m+j] + M[(j+1)*n];
+    if (v < bc){ bc = v; bj = j; }
+  }
+  const rev = [];
+  let mask = full, j = bj;
+  for(;;){
+    rev.push(j+1);
+    const k = par[mask*m+j];
+    if (k < 0) break;
+    mask ^= (1<<j); j = k;
+  }
+  const tour = [0, ...rev.reverse()];
+  const cells = size*m;
+  const transitions = m >= 2 ? m*(m-1)*Math.pow(2, m-2) : 0;
+  yield { type:'done', tour, cost:bc, cells, states:cells/2, transitions, masks:size };
+}
+function buildBoard(M, n, seed){
+  // Deterministic scorecard: every algorithm on the current city set.
+  const rows = [];
+  const exact = n <= HK_LIMIT ? drain(hkGen(M, n, 0)) : null;
+  if (n <= ENUM_LIMIT){
+    const b = drain(bruteGen(M, n));
+    rows.push({ key:'brute', name:'Brute force', color:COLORS.brute, km:b.cost });
+  } else rows.push({ key:'brute', name:'Brute force', color:COLORS.brute, km:null, note:'too many tours' });
+  const rngNN = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+  const nnT = nnFrom(M, n, Math.floor(rngNN()*n));
+  rows.push({ key:'nn', name:'Nearest nbr', color:COLORS.nn, km:tourCost(nnT, M) });
+  const t2 = drain(twoOptGen(M, n, shuffledTour(n, mulberry32((seed ^ 0x85ebca6b) >>> 0))));
+  rows.push({ key:'twoopt', name:'2-opt', color:COLORS.twoopt, km:t2.cost });
+  const saT0 = clamp(0.12*tourCost(shuffledTour(n, mulberry32(seed>>>0)), M), 2, 15);
+  const sa = drain(saGen(M, n, shuffledTour(n, mulberry32((seed ^ 0xc2b2ae35) >>> 0)),
+                         mulberry32((seed ^ 0x27d4eb2f) >>> 0), saT0, 0.995, 0.02));
+  rows.push({ key:'sa', name:'Annealing', color:COLORS.sa, km:sa.cost });
+  if (exact) rows.push({ key:'exact', name:'Held–Karp', color:COLORS.exact, km:exact.cost, exact:true });
+  else rows.push({ key:'exact', name:'Held–Karp', color:COLORS.exact, km:null, note:'intractable at this size' });
+  const ref = exact ? exact.cost : Math.min(...rows.filter(r=>r.km!=null).map(r=>r.km));
+  for (const r of rows){
+    if (r.km == null){ r.gap = null; continue; }
+    r.gap = (r.km - ref) / ref * 100;
+    if (exact && r.key === 'exact') r.gapLabel = 'optimal ✓';
+    else if (Math.abs(r.gap) < 0.005) r.gapLabel = exact ? 'optimal ✓' : 'best known';
+    else r.gapLabel = '+' + r.gap.toFixed(1) + '%';
+  }
+  return { rows, ref, exact: !!exact, max: Math.max(...rows.filter(r=>r.km!=null).map(r=>r.km)) };
+}
+/* ---------------- MRT network model (scene 6) ----------------
+   Nodes = MRT stations (LRT excluded). Routing states = (station, service)
+   so transfers are charged properly: hopping along a line costs hopMin,
+   changing service at an interchange costs xferMin. CE through-runs as
+   Circle Line service; the Changi shuttle (CG) is its own service — you
+   transfer at Tanah Merah, as in real life. All times are estimates. */
+const NET = D.network;
+const NODE = NET.nodes;
+const NIDX = {}; NODE.forEach((s,i) => NIDX[s.name] = i);
+const edgeSvc = L => L === 'CE' ? 'CC' : L;
+const ADJ = NODE.map(() => []);           // station graph (BFS)
+for (const [a,b,L] of NET.edges){ ADJ[a].push({to:b,line:L}); ADJ[b].push({to:a,line:L}); }
+const ST = [], ST_OF = NODE.map(() => ({}));
+function addState(st, sv){ if (ST_OF[st][sv] == null){ ST_OF[st][sv] = ST.length; ST.push({st, svc:sv}); } }
+NODE.forEach((nd,i) => nd.services.forEach(sv => addState(i, sv)));
+for (const [a,b,L] of NET.edges){ const sv = edgeSvc(L); addState(a, sv); addState(b, sv); }
+const NS = ST.length;
+const SADX = ST.map(() => []);            // state graph (Dijkstra / A*)
+for (const [a,b,L] of NET.edges){
+  const sv = edgeSvc(L), sa = ST_OF[a][sv], sb = ST_OF[b][sv];
+  SADX[sa].push({to:sb, kind:'hop'}); SADX[sb].push({to:sa, kind:'hop'});
+}
+NODE.forEach((nd,i) => {
+  const svs = Object.keys(ST_OF[i]);
+  for (let x=0;x<svs.length;x++) for (let y=x+1;y<svs.length;y++){
+    const a = ST_OF[i][svs[x]], b = ST_OF[i][svs[y]];
+    SADX[a].push({to:b, kind:'xfer'}); SADX[b].push({to:a, kind:'xfer'});
+  }
+});
+let MAXHOP = 0;
+for (const [a,b] of NET.edges)
+  MAXHOP = Math.max(MAXHOP, haversine(NODE[a].lat, NODE[a].lon, NODE[b].lat, NODE[b].lon));
+/* binary min-heap on [f, g, state] */
+function heapPush(h, it){
+  h.push(it); let i = h.length-1;
+  while (i > 0){ const p = (i-1)>>1;
+    if (h[p][0] < h[i][0] || (h[p][0] === h[i][0] && h[p][2] <= h[i][2])) break;
+    [h[p],h[i]] = [h[i],h[p]]; i = p; }
+}
+function heapPop(h){
+  const top = h[0], last = h.pop();
+  if (h.length){ h[0] = last; let i = 0;
+    for(;;){ const l = 2*i+1, r = l+1; let m = i;
+      const less = (a,b) => a[0] < b[0] || (a[0] === b[0] && a[2] < b[2]);
+      if (l < h.length && less(h[l], h[m])) m = l;
+      if (r < h.length && less(h[r], h[m])) m = r;
+      if (m === i) break; [h[m],h[i]] = [h[i],h[m]]; i = m; } }
+  return top;
+}
+function pathStats(path, lines, hopMin, xferMin){
+  let transfers = 0;
+  for (let i=1;i<lines.length;i++) if (lines[i] !== lines[i-1]) transfers++;
+  const stops = path.length-1;
+  return { stops, transfers, minutes: stops*hopMin + transfers*xferMin };
+}
+function* bfsGen(src, dst, hopMin, xferMin){
+  // Unit-weight breadth-first search: provably fewest stops. Transfers and
+  // minutes are scored afterwards — BFS cannot see them.
+  const walkOf = {}; if (dst.poi) for (const [wi,wm] of dst.poi.walkIdx) walkOf[wi] = wm;
+  const targets = dst.poi ? walkOf : { [dst.station]: 0 };
+  const dist = new Int32Array(NODE.length).fill(-1);
+  const par = new Int32Array(NODE.length).fill(-1), parLine = new Array(NODE.length).fill(null);
+  dist[src] = 0;
+  const q = [src]; let explored = 0, best = null;
+  for (let qi=0; qi<q.length; qi++){
+    const u = q[qi];
+    if (best && dist[u] > best.stops) break;
+    explored++;
+    yield { type:'settle', st:u, cost:dist[u], explored };
+    if (u in targets){
+      const cand = { st:u, stops:dist[u], walk:targets[u] };
+      if (!best || cand.stops < best.stops || (cand.stops === best.stops && cand.walk < best.walk)) best = cand;
+    }
+    for (const {to,line} of ADJ[u])
+      if (dist[to] < 0){ dist[to] = dist[u]+1; par[to] = u; parLine[to] = line; q.push(to); }
+  }
+  const path = [], lines = [];
+  for (let u=best.st; u>=0; u=par[u]){ path.push(u); if (par[u] >= 0) lines.push(edgeSvc(parLine[u])); }
+  path.reverse(); lines.reverse();
+  const ps = pathStats(path, lines, hopMin, xferMin);
+  yield { type:'done', path, lines, ...ps, walk:best.walk, explored, cost:ps.stops };
+}
+function* wsearchGen(kind, src, dst, obj, hopMin, xferMin){
+  // kind: 'dijkstra' | 'astar'. obj: 'stops' | 'time' | 'transfers'.
+  // A* heuristic: straight-line km / fastest possible network speed
+  // (maxHopKm per hopMin) — admissible, so A* is exactly as optimal as
+  // Dijkstra, only faster. Other objectives: h = 0 (A* = Dijkstra, honestly).
+  const wOf = e => e.kind === 'hop'
+    ? (obj === 'time' ? hopMin : obj === 'transfers' ? 1e-6 : 1)
+    : (obj === 'time' ? xferMin : obj === 'transfers' ? 1 : 0);
+  const goal = dst.poi ? dst.poi : NODE[dst.station];
+  const vmax = MAXHOP / hopMin; // km per minute, upper bound
+  const h = s => (kind === 'astar' && obj === 'time')
+    ? haversine(NODE[ST[s].st].lat, NODE[ST[s].st].lon, goal.lat, goal.lon) / vmax : 0;
+  const walkOf = {}; if (dst.poi) for (const [wi,wm] of dst.poi.walkIdx) walkOf[wi] = wm;
+  const isTarget = s => dst.poi ? (ST[s].st in walkOf) : ST[s].st === dst.station;
+  const g = new Float64Array(NS).fill(Infinity);
+  const par = new Int32Array(NS).fill(-1), settled = new Uint8Array(NS);
+  const heap = [];
+  for (const sv of Object.keys(ST_OF[src])){ const s = ST_OF[src][sv]; g[s] = 0; heapPush(heap, [h(s), 0, s]); }
+  let explored = 0, best = null;
+  while (heap.length){
+    const [f, gu, u] = heapPop(heap);
+    if (settled[u] || gu > g[u] + 1e-12) continue;
+    settled[u] = 1; explored++;
+    yield { type:'settle', st:ST[u].st, state:u, cost:gu, explored };
+    if (isTarget(u)){
+      const walk = dst.poi ? walkOf[ST[u].st] : 0;
+      const total = obj === 'time' ? gu + walk : gu;
+      if (!best || total < best.total - 1e-12 || (Math.abs(total-best.total) <= 1e-12 && walk < best.walk))
+        best = { state:u, total, walk };
+      if (!dst.poi) break; // single target: first settle is optimal
+    }
+    if (best && heap.length && heap[0][0] > best.total + 1e-12) break;
+    for (const e of SADX[u]){
+      const v = e.to; if (settled[v]) continue;
+      const ng = gu + wOf(e);
+      if (ng < g[v] - 1e-12){ g[v] = ng; par[v] = u; heapPush(heap, [ng + h(v), ng, v]); }
+    }
+  }
+  const states = [];
+  for (let u=best.state; u>=0; u=par[u]) states.push(u);
+  states.reverse();
+  const path = [ST[states[0]].st], lines = [];
+  let transfers = 0;
+  for (let i=1;i<states.length;i++){
+    const a = ST[states[i-1]], b = ST[states[i]];
+    if (a.st === b.st){ transfers++; continue; }
+    path.push(b.st); lines.push(b.svc);
+  }
+  const stops = path.length-1;
+  const minutes = stops*hopMin + transfers*xferMin;
+  yield { type:'done', path, lines, stops, transfers, minutes, walk:best.walk, explored, cost:best.total };
+}
+/* ---------------- global state ---------------- */
+const G = {
+  cities: [], M: null, n: 0,
+  seed: 42, scene: 3, speed: 1, playing: false,
+  S: null,                 // active scene visual state
+  ticker: { shown: 0, target: 0 },
+  customCount: 0,
+  proj: null, hover: null, time: 0,
+};
+const PRIORITY = D.defaults.concat(D.extras);
+
+function setCities(list, keepPlaying){
+  G.cities = list.map(c => ({...c}));
+  G.n = G.cities.length;
+  G.M = buildMatrix(G.cities);
+  computeProjection();
+  $('#city-slider').value = clamp(G.n, 5, 20);
+  $('#city-out').textContent = G.n;
+  resetRun(keepPlaying);
+}
+function citiesFromSlider(k){
+  return PRIORITY.slice(0, k).map(s => ({ code:s.code, name:s.name, lat:s.lat, lon:s.lon }));
+}
+
+/* ---------------- projection & canvas ---------------- */
+const canvas = $('#stage'), ctx = canvas.getContext('2d');
+let CW = 0, CH = 0, DPR = 1;
+const LAT0 = 1.35, KX = Math.cos(LAT0*Math.PI/180);
+function computeProjection(){
+  let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
+  const add = (lon,lat) => {
+    const x = lon*KX, y = -lat;
+    if (x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y;
+  };
+  for (const ring of D.island) for (const p of ring) add(p[0],p[1]);
+  for (const c of G.cities) add(c.lon, c.lat);
+  const pad = 30;
+  const w = Math.max(50, CW - pad*2), h = Math.max(50, CH - pad*2);
+  const s = Math.min(w/(maxX-minX), h/(maxY-minY));
+  G.proj = { s, ox: pad + (w - (maxX-minX)*s)/2 - minX*s, oy: pad + (h - (maxY-minY)*s)/2 - minY*s };
+}
+function toScreen(lon, lat){ const p = G.proj; return [p.ox + lon*KX*p.s, p.oy - lat*p.s]; }
+function fromScreen(x, y){ const p = G.proj; return [(x - p.ox)/p.s/KX, -(y - p.oy)/p.s]; }
+function resize(){
+  const box = $('#stage-box');
+  CW = box.clientWidth; CH = box.clientHeight;
+  DPR = Math.min(2.5, window.devicePixelRatio || 1);
+  canvas.width = Math.round(CW*DPR); canvas.height = Math.round(CH*DPR);
+  computeProjection();
+}
+
+/* ---------------- drawing helpers ---------------- */
+function glowLine(pts, color, width, alpha, closed){
+  if (pts.length < 2) return;
+  ctx.save();
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  if (closed) ctx.closePath();
+  ctx.shadowColor = color; ctx.shadowBlur = 14;
+  ctx.strokeStyle = color; ctx.globalAlpha = alpha*0.28; ctx.lineWidth = width*3.2;
+  ctx.stroke();
+  ctx.shadowBlur = 8;
+  ctx.globalAlpha = alpha; ctx.lineWidth = width;
+  ctx.stroke();
+  ctx.restore();
+}
+function tourPoints(tour, partial){
+  const pts = tour.map(i => toScreen(G.cities[i].lon, G.cities[i].lat));
+  if (partial != null && partial < 1 && pts.length >= 2){
+    const a = pts[pts.length-2], b = pts[pts.length-1];
+    pts[pts.length-1] = [a[0]+(b[0]-a[0])*partial, a[1]+(b[1]-a[1])*partial];
+  }
+  return pts;
+}
+function drawCityDot(i, color, r, pulse){
+  const c = G.cities[i];
+  const [x,y] = toScreen(c.lon, c.lat);
+  ctx.save();
+  if (pulse > 0){
+    ctx.beginPath(); ctx.arc(x, y, r + 4 + pulse*13, 0, 7);
+    ctx.strokeStyle = color; ctx.globalAlpha = 0.5*(1-pulse); ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  ctx.shadowColor = color; ctx.shadowBlur = 12;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, 7);
+  ctx.fillStyle = color; ctx.globalAlpha = 1; ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.beginPath(); ctx.arc(x, y, Math.max(1.4, r*0.42), 0, 7);
+  ctx.fillStyle = '#0a1226'; ctx.fill();
+  ctx.restore();
+  return [x,y];
+}
+const labelRects = [];
+function drawLabel(i, x, y, color){
+  const c = G.cities[i];
+  const fs = CW < 560 ? 10 : 11.5;
+  ctx.font = `600 ${fs}px -apple-system, "Segoe UI", Roboto, sans-serif`;
+  const text = c.name;
+  const w = ctx.measureText(text).width;
+  let lx = x + 9, ly = y - 7;
+  if (lx + w > CW - 6) lx = x - 9 - w;
+  if (ly < 12) ly = y + 16;
+  const rect = [lx-2, ly-fs, lx+w+2, ly+4];
+  for (const r of labelRects)
+    if (rect[0]<r[2] && rect[2]>r[0] && rect[1]<r[3] && rect[3]>r[1]) return;
+  labelRects.push(rect);
+  ctx.save();
+  ctx.fillStyle = 'rgba(5,10,22,.72)';
+  ctx.fillRect(rect[0], rect[1], rect[2]-rect[0], rect[3]-rect[1]);
+  ctx.fillStyle = color; ctx.globalAlpha = .92;
+  ctx.fillText(text, lx, ly);
+  ctx.restore();
+}
+function drawBase(){
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.clearRect(0,0,CW,CH);
+  const g = ctx.createLinearGradient(0,0,0,CH);
+  g.addColorStop(0,'#081124'); g.addColorStop(1,'#050b18');
+  ctx.fillStyle = g; ctx.fillRect(0,0,CW,CH);
+  // island silhouette (simplified region polygons, one dark landmass)
+  ctx.save();
+  ctx.beginPath();
+  for (const ring of D.island){
+    const p0 = toScreen(ring[0][0], ring[0][1]);
+    ctx.moveTo(p0[0], p0[1]);
+    for (let i=1;i<ring.length;i++){ const p = toScreen(ring[i][0], ring[i][1]); ctx.lineTo(p[0],p[1]); }
+    ctx.closePath();
+  }
+  ctx.shadowColor = 'rgba(59,130,246,.4)'; ctx.shadowBlur = 22;
+  ctx.fillStyle = '#0f1d36'; ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(125,165,225,.3)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.restore();
+  // inactive stations: faint context dots
+  const active = new Set(G.cities.map(c => c.name));
+  ctx.save();
+  ctx.fillStyle = 'rgba(140,165,205,.34)';
+  for (const s of D.stations){
+    if (active.has(s.name)) continue;
+    const [x,y] = toScreen(s.lon, s.lat);
+    ctx.beginPath(); ctx.arc(x,y,1.4,0,7); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawCities(color, startIdx, pulseT){
+  labelRects.length = 0;
+  const pos = [];
+  for (let i=0;i<G.n;i++){
+    const pulse = (i === startIdx && pulseT != null) ? (pulseT % 1) : 0;
+    pos.push(drawCityDot(i, color, CW < 560 ? 4.4 : 5.4, pulse));
+  }
+  for (let i=0;i<G.n;i++) drawLabel(i, pos[i][0], pos[i][1], '#c9d8f2');
+}
+function drawFlow(pts, color, closed){
+  // subtle moving sparkle along the tour
+  if (pts.length < 2) return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  if (closed) ctx.closePath();
+  ctx.setLineDash([2, 16]);
+  ctx.lineDashOffset = -G.time * 26;
+  ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = .3; ctx.lineWidth = 1.1;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  ctx.restore();
+}
+function edgeHit(x, y, tour){
+  if (!tour || tour.length < 2) return null;
+  const n = tour.length;
+  let best = null;
+  for (let i=0;i<n;i++){
+    const A = toScreen(G.cities[tour[i]].lon, G.cities[tour[i]].lat);
+    const B = toScreen(G.cities[tour[(i+1)%n]].lon, G.cities[tour[(i+1)%n]].lat);
+    const dx=B[0]-A[0], dy=B[1]-A[1];
+    const L2 = dx*dx+dy*dy;
+    const t = L2 ? clamp(((x-A[0])*dx+(y-A[1])*dy)/L2, 0, 1) : 0;
+    const d = Math.hypot(x-(A[0]+t*dx), y-(A[1]+t*dy));
+    if (d < 7 && (!best || d < best.d))
+      best = { d, a:tour[i], b:tour[(i+1)%n], km:G.M[tour[i]*n+tour[(i+1)%n]] };
+  }
+  return best;
+}
+/* ---------------- scene definitions ---------------- */
+const EXPLAIN = {
+  1:{ html:`<p>Try <b>every possible loop</b> and keep the shortest. Fixing the start station and counting
+     reversed loops once leaves <b>(n−1)!/2</b> distinct tours — factorial growth.</p>
+     <p>Guaranteed optimal, and hopeless beyond a handful of cities: every new station multiplies the work by n.</p>`,
+     cx:`time O(n! · n) &middot; space O(n)` },
+  2:{ html:`<p>From the start station, always hop to the <b>nearest unvisited</b> station, then close the loop.
+     One pass, no backtracking, no lookahead.</p>
+     <p>Blazing fast — but the cheap early hops force expensive ones at the end. Greedy is a starting point, not an answer.</p>`,
+     cx:`time O(n<sup>2</sup>) &middot; space O(n)` },
+  3:{ html:`<p>Remove two edges, <b>reverse the segment between them</b>, reconnect. If the loop got shorter,
+     keep the swap; repeat until no swap helps.</p>
+     <p>Every crossing can be uncrossed this way, so a 2-opt optimum has no crossings — yet it can still be
+     longer than the true best loop. Local optima are traps.</p>`,
+     cx:`O(n<sup>2</sup>) per scan &middot; each swap O(n)` },
+  4:{ html:`<p>Propose random segment reversals. Always accept improvements; accept worse tours with probability
+     <b>e<sup>−Δ/T</sup></b>. Start hot (bold exploration), cool slowly (refinement).</p>
+     <p>Uphill moves let the search escape local optima. As T → 0 the jitter freezes into a clean tour —
+     near-optimal in practice, never provably optimal.</p>`,
+     cx:`O(moves · n) &middot; schedule T ← T·r` },
+  5:{ html:`<p><b>Held–Karp dynamic programming</b>: for every subset of stations and every possible last station,
+     remember the cheapest path reaching that state. Each state reuses smaller solved states — no tour is ever enumerated.</p>
+     <p>TSP is NP-hard: no polynomial-time algorithm is known, and finding one would prove P = NP.
+     Held–Karp's O(n²·2ⁿ) beats n! but is still exponential — 15 stations is a demo, 50 is out of reach.
+     Checking a tour is easy, finding the best one is hard — that asymmetry is the heart of the P vs NP question.</p>`,
+     cx:`time O(n<sup>2</sup> · 2<sup>n</sup>) &middot; space O(n · 2<sup>n</sup>)` },
+  6:{ html:`<p>The commuter's version: <b>fastest route from A to B</b> on the real network.
+     <b>BFS</b> floods the graph hop by hop — provably fewest stops, blind to time.
+     <b>Dijkstra</b> settles stations in true cost order, charging every hop and every transfer.</p>
+     <p><b>A*</b> adds an admissible heuristic — straight-line distance to the goal divided by the
+     network's top speed — so it settles far fewer states and still guarantees the same optimum.
+     And the punchline: change the objective (stops / time / transfers / walk) and the "best" route changes.
+     The algorithm isn't wrong — the objective function is a choice.</p>`,
+     cx:`BFS O(V+E) &middot; Dijkstra O(E log V) &middot; A* same, fewer settles` },
+};
+
+function gapText(km, n){
+  if (n > HK_LIMIT) return 'exact intractable &gt;15';
+  const ex = drain(hkGen(G.M, n, 0));
+  const gap = (km - ex.cost)/ex.cost*100;
+  return Math.abs(gap) < 0.005 ? 'matches exact ✓'
+    : `+${gap.toFixed(1)}% (exact ${ex.cost.toFixed(2)} km)`;
+}
+function setTicker(km){ G.ticker.target = km; }
+function statusText(t){ $('#ticker-status').textContent = t; }
+
+const SCENES = {};
+
+/* ---- Scene 1: The Explosion (brute force) ---- */
+SCENES[1] = {
+  statsHTML(){
+    const enumOk = G.n <= ENUM_LIMIT;
+    return `<h3>Distinct tours &middot; (n−1)!/2</h3>
+    <div class="big-stat" id="bf-counter" style="color:var(--brute)">0</div>
+    <div class="stat-sub" id="bf-time"></div>
+    <div class="stat-sub" id="bf-more" style="color:var(--faint)"></div>
+    <div style="margin-top:12px">
+      <div class="stat-row"><span class="k">enumerated</span><span class="v" id="bf-checked">—</span></div>
+      <div class="stat-row"><span class="k">best so far</span><span class="v" id="bf-best">—</span></div>
+      <div class="progress"><div class="fill" id="bf-prog" style="background:var(--brute)"></div></div>
+      <div class="caption good" id="bf-cap" hidden></div>
+      ${enumOk ? '' : `<div class="caption warn">Enumeration animates only for ≤ ${ENUM_LIMIT} cities.
+        At ${G.n} cities the ${fmtBig(distinctTours(G.n))} tours above are exactly why — the counter is the demo.</div>`}
+    </div>`;
+  },
+  controlsHTML(){
+    return `<div class="btn-row"><button class="btn" id="bf-enum" ${G.n>ENUM_LIMIT?'disabled':''}>Enumerate tours</button></div>
+    <div class="stat-sub" style="margin-top:8px">${G.n<=ENUM_LIMIT
+      ? 'Every distinct loop is flashed on the map; the best so far stays lit. This is the exact optimum.'
+      : 'Disabled: too many tours to animate one by one. Add cities with the slider and watch the counter detonate.'}</div>`;
+  },
+  make(){
+    const total = distinctTours(G.n);
+    setTicker(0);
+    return { total, countStart:G.time, countDur:1.5,
+      gen: G.n<=ENUM_LIMIT ? bruteGen(G.M, G.n) : null,
+      cand:null, candT:0, best:null, bestCost:Infinity, checked:0, done:G.n>ENUM_LIMIT, acc:0,
+      rate: Math.max(6, total/16) };
+  },
+  pull(S){
+    const r = S.gen.next();
+    if (r.done) { S.done = true; return; }
+    const ev = r.value;
+    if (ev.type === 'candidate'){
+      S.checked = ev.count; S.cand = ev.tour; S.candT = 0.16;
+      if (ev.isBest){ S.best = ev.best; S.bestCost = ev.bestCost; setTicker(ev.bestCost); }
+    } else if (ev.type === 'done'){
+      S.done = true; S.best = ev.tour; S.bestCost = ev.cost; S.checked = ev.count;
+      setTicker(ev.cost);
+    }
+  },
+  update(S, dt){
+    const countT = Math.min(S.countDur, G.time - S.countStart);
+    if (S.candT > 0) S.candT -= dt;
+    if (S.gen && !S.done){
+      S.acc += dt * G.speed * S.rate;
+      let guard = 0;
+      while (S.acc >= 1 && !S.done && guard++ < 600){ this.pull(S); S.acc -= 1; }
+    }
+    // DOM
+    const f = easeOutCubic(countT / S.countDur);
+    const v = S.total > 1e6
+      ? Math.pow(10, Math.log10(Math.max(1,S.total)) * f)
+      : S.total * f;
+    $('#bf-counter').innerHTML = countT >= S.countDur ? fmtBig(S.total) : fmtBig(v);
+    $('#bf-time').innerHTML = `at 10<sup>9</sup> tours/sec: ≈ <b>${fmtTime(S.total/1e9)}</b>`;
+    const t30 = distinctTours(30)/1e9/(365.25*86400);
+    $('#bf-more').innerHTML = `at 30 cities: ≈ ${fmtBig(t30/UNIVERSE_YEARS)}× the age of the universe`;
+    if (S.gen){
+      $('#bf-checked').textContent = `${S.checked.toLocaleString('en-US')} / ${S.total.toLocaleString('en-US')}`;
+      $('#bf-best').textContent = S.best ? S.bestCost.toFixed(2)+' km' : '—';
+      $('#bf-prog').style.width = (S.checked/S.total*100)+'%';
+      const cap = $('#bf-cap');
+      if (S.done){ cap.hidden = false; cap.textContent = `Exact optimum: ${S.bestCost.toFixed(2)} km — all ${S.checked.toLocaleString('en-US')} distinct tours checked.`; }
+      else cap.hidden = true;
+    }
+    statusText(!S.gen ? 'brute force · the counter is the point'
+      : S.done ? 'brute force · exact optimum ✓'
+      : `brute force · checking ${S.checked.toLocaleString('en-US')} / ${S.total.toLocaleString('en-US')}`);
+  },
+  stepOnce(S){ if (S.gen && !S.done) this.pull(S); },
+  draw(S){
+    drawBase();
+    if (S.best) { glowLine(tourPoints(S.best), COLORS.brute, 2.2, .92, true); drawFlow(tourPoints(S.best), COLORS.brute, true); }
+    if (S.cand && S.candT > 0 && !S.done)
+      glowLine(tourPoints(S.cand), '#9fb4d8', 1.1, .38*(S.candT/0.16), true);
+    drawCities('#e8eefc', -1);
+  },
+  bind(){
+    const b = $('#bf-enum');
+    if (b) b.onclick = () => { if (!G.playing) togglePlay(); };
+  },
+};
+
+/* ---- Scene 2: Nearest Neighbor (greedy) ---- */
+SCENES[2] = {
+  statsHTML(){
+    return `<h3>Greedy construction</h3>
+    <div class="stat-row"><span class="k">start</span><span class="v" id="nn-start">—</span></div>
+    <div class="stat-row"><span class="k">visited</span><span class="v" id="nn-visited">—</span></div>
+    <div class="stat-row"><span class="k">last hop</span><span class="v" id="nn-hop">—</span></div>
+    <div class="stat-row"><span class="k">final length</span><span class="v" id="nn-final">—</span></div>
+    <div class="stat-row"><span class="k">vs exact</span><span class="v" id="nn-gap">—</span></div>
+    <div class="caption warn" id="nn-cap" hidden>Greedy never looks ahead — it paints itself into a corner.
+      The red edges are the price of short-sighted hops.</div>`;
+  },
+  controlsHTML(){
+    return `<div class="stat-sub">Play grows the tour hop by hop from a seed-chosen start.
+    At the end the closing edge and any pathologically long edges light up.
+    ${G.n<=HK_LIMIT ? 'The gap vs the exact optimum is computed with Held–Karp.' : 'Above 15 cities the exact gap is intractable — scene 5 shows a heuristic scorecard instead.'}</div>`;
+  },
+  make(){
+    const rng = mulberry32((G.seed ^ 0x9e3779b9) >>> 0);
+    const start = Math.floor(rng()*G.n);
+    setTicker(0);
+    return { gen: nnGen(G.M, G.n, start), start, path:[start], edge:null,
+      done:false, tour:null, cost:0, longEdges:[], lastKm:0 };
+  },
+  pull(S){
+    const r = S.gen.next();
+    if (r.done) return;
+    const ev = r.value;
+    if (ev.type === 'visit') S.edge = { from:ev.from, to:ev.to, km:ev.km, t:0, dur:.5, closing:false };
+    else if (ev.type === 'close') S.edge = { from:ev.from, to:ev.to, km:ev.km, t:0, dur:.95, closing:true };
+    else if (ev.type === 'done'){
+      S.done = true; S.tour = ev.tour; S.cost = ev.cost; S.longEdges = ev.longEdges;
+      setTicker(ev.cost);
+      $('#nn-final').textContent = ev.cost.toFixed(2)+' km';
+      $('#nn-gap').innerHTML = gapText(ev.cost, G.n);
+      $('#nn-cap').hidden = false;
+    }
+  },
+  update(S, dt){
+    if (!S.done){
+      if (S.edge){
+        S.edge.t += dt * G.speed;
+        if (S.edge.t >= S.edge.dur){
+          if (!S.edge.closing){
+            S.path.push(S.edge.to);
+            S.lastKm = S.edge.km;
+            setTicker(pathCost(S.path, G.M));
+          }
+          S.edge = null;
+        }
+      } else this.pull(S);
+    }
+    $('#nn-start').textContent = G.cities[S.start].name;
+    $('#nn-visited').textContent = `${S.path.length} / ${G.n}`;
+    $('#nn-hop').textContent = S.edge ? `${S.edge.km.toFixed(2)} km${S.edge.closing?' (closing)':''}`
+      : (S.lastKm ? S.lastKm.toFixed(2)+' km' : '—');
+    statusText(S.done ? 'nearest neighbor · tour complete'
+      : `nearest neighbor · visiting ${S.path.length}/${G.n}`);
+  },
+  stepOnce(S){
+    if (S.done) return;
+    if (S.edge) S.edge.t = S.edge.dur;
+    else { this.pull(S); if (S.edge) S.edge.t = S.edge.dur; }
+  },
+  draw(S){
+    drawBase();
+    const pts = S.path.map(i => toScreen(G.cities[i].lon, G.cities[i].lat));
+    if (S.edge){
+      const b = toScreen(G.cities[S.edge.to].lon, G.cities[S.edge.to].lat);
+      const a = pts[pts.length-1];
+      const f = easeInOut(clamp(S.edge.t/S.edge.dur, 0, 1));
+      pts.push([a[0]+(b[0]-a[0])*f, a[1]+(b[1]-a[1])*f]);
+    }
+    const closed = S.done;
+    if (pts.length >= 2) glowLine(pts, COLORS.nn, 2.4, .95, closed);
+    if (closed){
+      drawFlow(tourPoints(S.tour), COLORS.nn, true);
+      // closing edge emphasis
+      const n = G.n;
+      const A = toScreen(G.cities[S.tour[n-1]].lon, G.cities[S.tour[n-1]].lat);
+      const B = toScreen(G.cities[S.tour[0]].lon, G.cities[S.tour[0]].lat);
+      glowLine([A,B], '#ffe1a8', 3.4, .9, false);
+      // pathological edges in red
+      for (const ei of S.longEdges){
+        const a = S.tour[ei], b = S.tour[(ei+1)%n];
+        const P = toScreen(G.cities[a].lon, G.cities[a].lat);
+        const Q = toScreen(G.cities[b].lon, G.cities[b].lat);
+        glowLine([P,Q], '#f87171', 3.2, .85, false);
+      }
+    }
+    drawCities('#f8d9a0', S.start, S.done ? null : G.time*1.4);
+  },
+  bind(){},
+};
+/* ---- Scene 3: 2-opt (local search) — the money shot ---- */
+function doubleBridge(tour, rng){
+  const n = tour.length, cuts = [];
+  while (cuts.length < 3){
+    const c = 1 + Math.floor(rng()*(n-1));
+    if (!cuts.includes(c)) cuts.push(c);
+  }
+  cuts.sort((a,b)=>a-b);
+  const [a,b,c] = cuts;
+  return tour.slice(0,a).concat(tour.slice(b,c), tour.slice(a,b), tour.slice(c));
+}
+SCENES[3] = {
+  statsHTML(){
+    return `<h3>Local search</h3>
+    <div class="big-stat" id="to-swaps" style="color:var(--twoopt)">0</div>
+    <div class="stat-sub">accepted swaps</div>
+    <div style="margin-top:10px">
+      <div class="stat-row"><span class="k">tangled start</span><span class="v" id="to-start">—</span></div>
+      <div class="stat-row"><span class="k">now</span><span class="v" id="to-now">—</span></div>
+      <div class="stat-row"><span class="k">improved</span><span class="v" id="to-imp">—</span></div>
+      <div class="stat-row"><span class="k">vs exact</span><span class="v" id="to-gap">—</span></div>
+    </div>
+    <div class="caption" id="to-phase" hidden></div>
+    <div class="caption good" id="to-cap" hidden>Local optimum reached: no improving 2-opt move remains, so no
+      crossing edges are left. But a locally optimal tour can still be globally wrong.</div>`;
+  },
+  controlsHTML(){
+    return `<div class="btn-row"><button class="btn primary" id="btn-shake">Shake the tour</button></div>
+    <div class="stat-sub" style="margin-top:8px">Shake applies a seeded double-bridge kick, then 2-opt
+    re-converges. Red edges are removed, the reversed segment sweeps, green edges reconnect.</div>`;
+  },
+  make(){
+    const rng = mulberry32((G.seed ^ 0x85ebca6b) >>> 0);
+    const tour0 = shuffledTour(G.n, rng);
+    const cost = tourCost(tour0, G.M);
+    setTicker(cost);
+    return { gen: twoOptGen(G.M, G.n, tour0), tour:tour0, cost, startCost:cost,
+      swaps:0, anim:null, done:false, shakeCount:0 };
+  },
+  pull(S){
+    const r = S.gen.next();
+    if (r.done) return;
+    const ev = r.value;
+    if (ev.type === 'swap') S.anim = { ev, t:0, dur:1.12 };
+    else if (ev.type === 'done'){
+      S.done = true; S.tour = ev.tour; S.cost = ev.cost;
+      setTicker(ev.cost);
+      $('#to-gap').innerHTML = gapText(ev.cost, G.n);
+      $('#to-cap').hidden = false;
+    }
+  },
+  update(S, dt){
+    if (S.anim){
+      S.anim.t += dt * G.speed;
+      if (S.anim.t >= S.anim.dur){
+        const ev = S.anim.ev;
+        S.tour = ev.tour; S.cost = ev.newCost; S.swaps = ev.swaps;
+        setTicker(ev.newCost);
+        S.anim = null;
+      }
+    } else if (!S.done) this.pull(S);
+    $('#to-swaps').textContent = S.swaps;
+    $('#to-start').textContent = S.startCost.toFixed(2)+' km';
+    $('#to-now').textContent = S.cost.toFixed(2)+' km';
+    $('#to-imp').textContent = S.startCost > 0
+      ? '−' + ((1 - S.cost/S.startCost)*100).toFixed(1) + '%' : '—';
+    const ph = $('#to-phase');
+    if (S.anim){
+      ph.hidden = false;
+      const t = S.anim.t;
+      ph.textContent = t < .32 ? 'Removing two edges…' : t < .78 ? 'Reversing the segment between them…' : 'Reconnecting — shorter than before.';
+    } else ph.hidden = true;
+    statusText(S.done ? `2-opt · local optimum after ${S.swaps} swaps`
+      : S.anim ? `2-opt · swap ${S.swaps+1} in progress` : `2-opt · ${S.swaps} swaps`);
+  },
+  stepOnce(S){
+    if (S.anim) S.anim.t = S.anim.dur;
+    else if (!S.done){ this.pull(S); if (S.anim) S.anim.t = S.anim.dur; }
+  },
+  draw(S){
+    drawBase();
+    const dim = S.anim ? .38 : .95;
+    glowLine(tourPoints(S.tour), COLORS.twoopt, 2.3, dim, true);
+    if (!S.anim) drawFlow(tourPoints(S.tour), COLORS.twoopt, true);
+    if (S.anim){
+      const ev = S.anim.ev, t = S.anim.t;
+      const P = (i) => toScreen(G.cities[i].lon, G.cities[i].lat);
+      if (t < .32){
+        const a = .55 + .45*Math.sin(t*40);
+        for (const [u,v] of ev.removed) glowLine([P(u),P(v)], '#f87171', 3.6, a, false);
+      } else if (t < .78){
+        const seg = S.tour.slice(ev.i, ev.j+1).map(P);
+        glowLine(seg, '#a5f3fc', 3.2, .9, false);
+        // sweeping pulse along the reversed segment
+        const f = easeInOut((t-.32)/.46);
+        let total = 0; const lens = [];
+        for (let k=1;k<seg.length;k++){ const L = Math.hypot(seg[k][0]-seg[k-1][0], seg[k][1]-seg[k-1][1]); lens.push(L); total += L; }
+        let want = f*total, acc = 0, dot = seg[0];
+        for (let k=0;k<lens.length;k++){
+          if (acc + lens[k] >= want){ const g = (want-acc)/lens[k];
+            dot = [seg[k][0]+(seg[k+1][0]-seg[k][0])*g, seg[k][1]+(seg[k+1][1]-seg[k][1])*g]; break; }
+          acc += lens[k]; dot = seg[k+1];
+        }
+        ctx.save();
+        ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 16;
+        ctx.beginPath(); ctx.arc(dot[0], dot[1], 4.5, 0, 7);
+        ctx.fillStyle = '#ffffff'; ctx.fill();
+        ctx.restore();
+        for (const [u,v] of ev.removed) glowLine([P(u),P(v)], '#f87171', 2.6, .4, false);
+      } else {
+        for (const [u,v] of ev.added) glowLine([P(u),P(v)], COLORS.exact, 3.6, .95, false);
+      }
+    }
+    drawCities('#bfe9f5', -1);
+  },
+  bind(){
+    const b = $('#btn-shake');
+    if (b) b.onclick = () => {
+      const S = G.S;
+      S.shakeCount++;
+      const rng = mulberry32((G.seed ^ Math.imul(0x1b873593, S.shakeCount)) >>> 0);
+      const kicked = doubleBridge(S.tour, rng);
+      S.tour = kicked; S.cost = tourCost(kicked, G.M);
+      S.gen = twoOptGen(G.M, G.n, kicked);
+      S.anim = null; S.done = false;
+      setTicker(S.cost);
+      $('#to-cap').hidden = true; $('#to-gap').textContent = '—';
+      if (!G.playing) togglePlay();
+      toast('Double-bridge kick applied — watch 2-opt re-converge');
+    };
+  },
+};
+
+/* ---- Scene 4: Simulated Annealing ---- */
+SCENES[4] = {
+  statsHTML(){
+    return `<h3>Metropolis exploration</h3>
+    <div id="thermo-wrap">
+      <div id="thermo"><div class="merc" style="height:100%"></div>
+        <div class="tick" style="bottom:25%"></div><div class="tick" style="bottom:50%"></div><div class="tick" style="bottom:75%"></div></div>
+      <div id="thermo-info">
+        <div class="big-stat" id="sa-T" style="font-size:29px;color:var(--sa)">—</div>
+        <div class="stat-sub" id="sa-sched">temperature</div>
+        <div class="stat-row"><span class="k">moves</span><span class="v" id="sa-moves">0</span></div>
+        <div class="stat-row"><span class="k">accepted</span><span class="v" id="sa-acc">0</span></div>
+        <div class="stat-row"><span class="k">uphill ✓</span><span class="v" id="sa-up" style="color:var(--nn)">0</span></div>
+        <div class="stat-row"><span class="k">rejected</span><span class="v" id="sa-rej" style="color:var(--red)">0</span></div>
+      </div>
+    </div>
+    <div id="move-log">press play to start exploring</div>
+    <div class="stat-row"><span class="k">best seen</span><span class="v" id="sa-best">—</span></div>
+    <div class="stat-row"><span class="k">vs exact</span><span class="v" id="sa-gap">—</span></div>
+    <div class="caption good" id="sa-cap" hidden></div>`;
+  },
+  controlsHTML(){
+    return `<div class="ctl-row"><label for="sa-rate">cooling r</label>
+      <input type="range" id="sa-rate" min="0.95" max="0.999" step="0.001" value="0.995" style="flex:1">
+      <output id="sa-rate-out">0.995</output></div>
+    <div class="ctl-row"><label for="sa-t0">initial T</label>
+      <input type="range" id="sa-t0" min="1" max="30" step="0.5" value="10" style="flex:1">
+      <output id="sa-t0-out">10 km</output></div>
+    <div class="btn-row"><button class="btn primary" id="btn-reheat">Reheat</button></div>
+    <div class="stat-sub" style="margin-top:8px">Slower cooling (r → 0.999) means more moves and finer refinement.
+    Reheat jumps back to T₀ and re-anneals from the current tour.</div>`;
+  },
+  make(){
+    const rate = parseFloat(($('#sa-rate')||{}).value || 0.995);
+    const T0 = parseFloat(($('#sa-t0')||{}).value || 10);
+    const tour0 = shuffledTour(G.n, mulberry32((G.seed ^ 0xc2b2ae35) >>> 0));
+    const cost = tourCost(tour0, G.M);
+    const Tmin = 0.02;
+    const totalMoves = Math.max(1, Math.ceil(Math.log(Tmin/T0)/Math.log(rate)));
+    setTicker(cost);
+    return { tour:tour0, cost, startCost:cost, T:T0, T0, rate, Tmin,
+      gen: saGen(G.M, G.n, tour0, mulberry32((G.seed ^ 0x27d4eb2f) >>> 0), T0, rate, Tmin),
+      kTotal:0, kBase:0, acc:0, up:0, rej:0, best:tour0.slice(), bestCost:cost,
+      flash:null, done:false, reheats:0, totalMoves, moveRate: totalMoves/20, lastEv:null };
+  },
+  pull(S){
+    const r = S.gen.next();
+    if (r.done) return;
+    const ev = r.value;
+    if (ev.type === 'move'){
+      S.kTotal = S.kBase + ev.k;
+      S.acc = ev.acc; S.up = ev.up; S.rej = ev.rej;
+      S.T = ev.T * S.rate;
+      S.lastEv = ev;
+      S.flash = { kind:ev.kind, t:.22, i:ev.i, j:ev.j };
+      if (ev.accept){ S.tour = ev.tour; S.cost = ev.cost; setTicker(ev.cost); }
+      if (ev.bestCost < S.bestCost){ S.bestCost = ev.bestCost; S.best = ev.best; }
+    } else if (ev.type === 'done'){
+      S.done = true; S.tour = ev.tour; S.cost = ev.cost;
+      setTicker(ev.cost);
+      $('#sa-gap').innerHTML = gapText(ev.cost, G.n);
+      const cap = $('#sa-cap');
+      cap.hidden = false;
+      cap.textContent = `Settled at ${ev.cost.toFixed(2)} km after ${S.kTotal.toLocaleString('en-US')} moves — near-optimal, not provably optimal.`;
+    }
+  },
+  update(S, dt){
+    if (S.flash) { S.flash.t -= dt; if (S.flash.t <= 0) S.flash = null; }
+    if (!S.done){
+      S.acc += dt * G.speed * S.moveRate;
+      let guard = 0;
+      while (S.acc >= 1 && !S.done && guard++ < 400){ this.pull(S); S.acc -= 1; }
+    }
+    const merc = $('#thermo .merc');
+    if (merc) merc.style.height = clamp(S.T/S.T0*100, 0, 100) + '%';
+    $('#sa-T').textContent = S.T >= 1 ? S.T.toFixed(2)+' km' : S.T.toFixed(3)+' km';
+    $('#sa-sched').innerHTML = `T ← T × ${S.rate} each move · ${S.kTotal.toLocaleString('en-US')} / ~${S.totalMoves.toLocaleString('en-US')}`;
+    $('#sa-moves').textContent = S.kTotal.toLocaleString('en-US');
+    $('#sa-acc').textContent = S.acc.toLocaleString('en-US');
+    $('#sa-up').textContent = S.up.toLocaleString('en-US');
+    $('#sa-rej').textContent = S.rej.toLocaleString('en-US');
+    $('#sa-best').textContent = S.bestCost.toFixed(2)+' km';
+    const ev = S.lastEv, log = $('#move-log');
+    if (ev){
+      const d = ev.delta;
+      if (ev.kind === 'down')
+        log.innerHTML = `<span class="down">▼ Δ ${d.toFixed(2)} km</span> · accepted (downhill)`;
+      else if (ev.kind === 'up')
+        log.innerHTML = `<span class="up">▲ Δ +${d.toFixed(2)} km</span> · p = e<sup>−${d.toFixed(2)}/${ev.T.toFixed(2)}</sup> = ${ev.p.toFixed(2)} → <span class="up">accepted uphill</span>`;
+      else
+        log.innerHTML = `<span class="rej">▲ Δ +${d.toFixed(2)} km</span> · p = ${ev.p.toFixed(2)} → <span class="rej">rejected</span>`;
+    }
+    statusText(S.done ? 'annealing · cooled & settled'
+      : `annealing · T = ${S.T.toFixed(2)} km · move ${S.kTotal.toLocaleString('en-US')}`);
+  },
+  stepOnce(S){ if (!S.done) this.pull(S); },
+  draw(S){
+    drawBase();
+    glowLine(tourPoints(S.tour), COLORS.sa, 2.3, S.flash ? .5 : .95, true);
+    if (!S.flash) drawFlow(tourPoints(S.tour), COLORS.sa, true);
+    if (S.flash){
+      const a = clamp(S.flash.t/.22, 0, 1);
+      if (S.flash.kind === 'down') glowLine(tourPoints(S.tour), COLORS.twoopt, 2.8, .8*a, true);
+      else if (S.flash.kind === 'up') glowLine(tourPoints(S.tour), COLORS.nn, 2.8, .85*a, true);
+      else {
+        const n = G.n, i = S.flash.i, j = S.flash.j;
+        const c = S.tour[(i-1+n)%n], d = S.tour[j], b = S.tour[i], e = S.tour[(j+1)%n];
+        const P = (k) => toScreen(G.cities[k].lon, G.cities[k].lat);
+        ctx.save(); ctx.setLineDash([5,5]);
+        glowLine([P(c),P(d)], '#f87171', 2, .5*a, false);
+        glowLine([P(b),P(e)], '#f87171', 2, .5*a, false);
+        ctx.restore();
+      }
+    }
+    drawCities('#f0cdfa', -1);
+  },
+  bind(){
+    const rate = $('#sa-rate'), t0 = $('#sa-t0'), rh = $('#btn-reheat');
+    if (rate) rate.oninput = () => { $('#sa-rate-out').textContent = parseFloat(rate.value).toFixed(3); resetRun(true); };
+    if (t0) t0.oninput = () => { $('#sa-t0-out').textContent = t0.value+' km'; resetRun(true); };
+    if (rh) rh.onclick = () => {
+      const S = G.S;
+      S.reheats++;
+      S.kBase = S.kTotal;
+      S.T = S.T0;
+      const extra = Math.max(1, Math.ceil(Math.log(S.Tmin/S.T0)/Math.log(S.rate)));
+      S.totalMoves += extra;
+      S.moveRate = extra/12;
+      S.gen = saGen(G.M, G.n, S.tour, mulberry32((G.seed ^ Math.imul(0x2545f491, S.reheats)) >>> 0), S.T0, S.rate, S.Tmin);
+      S.done = false; S.flash = null;
+      $('#sa-cap').hidden = true; $('#sa-gap').textContent = '—';
+      if (!G.playing) togglePlay();
+      toast(`Reheated to T₀ = ${S.T0} km — exploring again`);
+    };
+  },
+};
+
+/* ---- Scene 5: The Exact Answer (Held–Karp) ---- */
+SCENES[5] = {
+  statsHTML(){
+    return `<h3>Held–Karp dynamic programming</h3>
+    <div class="big-stat" id="hk-cells" style="color:var(--exact)">—</div>
+    <div class="stat-sub" id="hk-cells-sub">DP table cells</div>
+    <div style="margin-top:10px">
+      <div class="stat-row"><span class="k">reachable states</span><span class="v" id="hk-states">—</span></div>
+      <div class="stat-row"><span class="k">transitions</span><span class="v" id="hk-trans">—</span></div>
+      <div class="stat-row"><span class="k">masks solved</span><span class="v" id="hk-prog">—</span></div>
+      <div class="progress"><div class="fill" id="hk-fill" style="background:var(--exact)"></div></div>
+      <div class="stat-row"><span class="k">optimal length</span><span class="v" id="hk-opt" style="color:var(--exact)">—</span></div>
+    </div>
+    <div class="caption" id="hk-cap" hidden></div>
+    <h3 style="margin-top:16px">Leaderboard</h3>
+    <div id="board"></div>
+    <div class="stat-sub" id="board-ref" style="margin-top:8px"></div>`;
+  },
+  controlsHTML(){
+    return `<div class="stat-sub">${G.n<=HK_LIMIT
+      ? 'The DP runs in chunks so the page never freezes. When it finishes, every algorithm gets an honest scorecard against the proven optimum.'
+      : `Above ${HK_LIMIT} cities the exact DP is marked intractable for this demo; the leaderboard scores heuristics against the best known tour.`}</div>`;
+  },
+  make(){
+    const n = G.n, m = n-1;
+    const cells = Math.pow(2,m)*m;
+    const S = { cells, states:cells/2, transitions: m>=2 ? m*(m-1)*Math.pow(2,m-2) : 0,
+      phase: n<=HK_LIMIT ? 'dp' : 'board', processed:0, totalMasks: Math.pow(2,m)-1,
+      gen:null, acc:0, rate:0, revealT:0, tour:null, cost:null, board:null };
+    setTicker(0);
+    if (n <= HK_LIMIT){
+      const chunk = Math.max(8, Math.ceil(S.totalMasks/40));
+      S.gen = hkGen(G.M, n, chunk);
+      S.rate = (S.totalMasks/chunk)/2.2;
+    } else {
+      S.board = buildBoard(G.M, n, G.seed);
+      setTicker(S.board.ref);
+      this.renderBoard(S);
+    }
+    return S;
+  },
+  pull(S){
+    const r = S.gen.next();
+    if (r.done) return;
+    const ev = r.value;
+    if (ev.type === 'progress') S.processed = ev.processed;
+    else if (ev.type === 'done'){
+      S.phase = 'reveal'; S.revealT = 0;
+      S.tour = ev.tour; S.cost = ev.cost; S.processed = S.totalMasks;
+      setTicker(ev.cost);
+      $('#hk-opt').textContent = ev.cost.toFixed(2)+' km';
+      const cap = $('#hk-cap');
+      cap.hidden = false;
+      cap.textContent = 'Proven optimal — every subset state solved exactly, no tour enumerated.';
+    }
+  },
+  renderBoard(S){
+    const b = S.board;
+    const html = b.rows.map(r => {
+      if (r.km == null)
+        return `<div class="board-row"><span class="bname">${r.name}</span>
+          <div class="btrack"></div>
+          <span class="bval" style="color:var(--faint)">—<span class="bgap na">${r.note}</span></span></div>`;
+      const w = (r.km/b.max*100).toFixed(1);
+      const cls = r.gapLabel.includes('✓') || r.gapLabel === 'best known' ? 'ok' : 'off';
+      const refTick = b.exact ? `<div class="bref" style="left:${(b.ref/b.max*100).toFixed(1)}%"></div>` : '';
+      return `<div class="board-row"><span class="bname">${r.name}</span>
+        <div class="btrack"><div class="bbar" data-w="${w}" style="background:${r.color};box-shadow:0 0 10px ${r.color}66"></div>${refTick}</div>
+        <span class="bval">${r.km.toFixed(1)}<span class="bgap ${cls}">${r.gapLabel}</span></span></div>`;
+    }).join('');
+    $('#board').innerHTML = html;
+    $('#board-ref').innerHTML = b.exact
+      ? 'gap measured against the Held–Karp optimum · straight-line km'
+      : 'gap measured against the best heuristic tour (exact intractable at this size)';
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      document.querySelectorAll('#board .bbar').forEach(el => el.style.width = el.dataset.w + '%');
+    }));
+  },
+  update(S, dt){
+    if (S.phase === 'dp'){
+      S.acc += dt * G.speed * S.rate;
+      let guard = 0;
+      while (S.acc >= 1 && S.phase === 'dp' && guard++ < 10){ this.pull(S); S.acc -= 1; }
+    } else if (S.phase === 'reveal'){
+      S.revealT += dt * G.speed;
+      if (S.revealT >= 1.2){ S.phase = 'board'; S.board = buildBoard(G.M, G.n, G.seed); this.renderBoard(S); }
+    }
+    $('#hk-cells').innerHTML = fmtBig(S.cells);
+    $('#hk-cells-sub').textContent = G.n<=HK_LIMIT ? `DP table cells · 2^${G.n-1} masks × ${G.n-1} endpoints`
+      : `cells the DP would need at ${G.n} cities — intractable for this demo`;
+    $('#hk-states').innerHTML = fmtBig(S.states);
+    $('#hk-trans').innerHTML = fmtBig(S.transitions);
+    $('#hk-prog').textContent = G.n<=HK_LIMIT
+      ? `${S.processed.toLocaleString('en-US')} / ${S.totalMasks.toLocaleString('en-US')}` : 'skipped';
+    $('#hk-fill').style.width = (G.n<=HK_LIMIT ? S.processed/S.totalMasks*100 : 0) + '%';
+    statusText(S.phase === 'dp' ? `Held–Karp · solving subsets ${Math.round(S.processed/S.totalMasks*100)}%`
+      : S.phase === 'reveal' ? 'Held–Karp · optimum found'
+      : S.board && S.board.exact ? 'leaderboard · scored vs the proven optimum' : 'leaderboard · heuristics only');
+  },
+  stepOnce(S){
+    if (S.phase === 'dp') this.pull(S);
+    else if (S.phase === 'reveal') S.revealT = 1.2;
+  },
+  draw(S){
+    drawBase();
+    if (S.tour){
+      const a = S.phase === 'reveal' ? easeOutCubic(clamp(S.revealT/1.2,0,1)) : 1;
+      glowLine(tourPoints(S.tour), COLORS.exact, 2.6, .95*a, true);
+      if (S.phase === 'board') drawFlow(tourPoints(S.tour), COLORS.exact, true);
+    }
+    drawCities('#c7f0d4', -1);
+  },
+  bind(){},
+};
+/* ---- Scene 6: Route Race (BFS vs Dijkstra vs A* on the real network) ---- */
+const RR = { obj:'time', src:NIDX['Kovan'], dst:{poi:NET.pois[0]}, hopMin:2, xferMin:4, preset:0 };
+const LANE_META = [
+  { key:'bfs', name:'BFS', tag:'fewest stops', color:'#94a3b8' },
+  { key:'dij', name:'Dijkstra', tag:'cost order', color:'#38bdf8' },
+  { key:'ast', name:'A*', tag:'goal-directed', color:'#4ade80' },
+];
+const OBJ_LABEL = { stops:'fewest stops', time:'fastest door-to-door', transfers:'fewest transfers' };
+function rrDstName(){ return RR.dst.poi ? RR.dst.poi.name : NODE[RR.dst.station].name; }
+function rrTotal(r){ return r.minutes + (RR.dst.poi ? r.walk : 0); }
+function rrObjCost(r){ return RR.obj === 'stops' ? r.stops : RR.obj === 'transfers' ? r.transfers : rrTotal(r); }
+function rrWinner(S){
+  let best = null;
+  for (const l of S.lanes){ if (!l.result) continue;
+    const c = rrObjCost(l.result);
+    if (!best || c < best.c - 1e-9 || (Math.abs(c-best.c) <= 1e-9 && l.result.explored < best.r.explored))
+      best = { key:l.key, c, r:l.result, color:l.color, name:l.name };
+  }
+  return best;
+}
+function rrSyncSelects(){
+  const s = $('#rr-src'), d = $('#rr-dst'), p = $('#rr-preset');
+  if (s) s.value = String(RR.src);
+  if (d) d.value = RR.dst.poi ? 'poi:' + NET.pois.indexOf(RR.dst.poi) : 'st:' + RR.dst.station;
+  if (p) p.value = String(RR.preset);
+}
+function rrRenderRoute(S){
+  const w = S.winner; if (!w) return;
+  const r = w.r;
+  let html = '', prev = null;
+  r.path.forEach((st,i) => {
+    if (i > 0){
+      const L = r.lines[i-1];
+      if (prev && L !== prev) html += '<span class="xfer-mark">⇄</span>';
+      html += `<span class="line-chip" style="background:${NET.lines[L].color}">${L}</span>`;
+      prev = L;
+    } else prev = r.lines[0] || null;
+    html += `<span class="stop">${NODE[st].name}</span> `;
+  });
+  if (RR.dst.poi && r.walk > 0)
+    html += `<div class="stat-sub" style="margin-top:4px">+ ${r.walk} min walk → ${RR.dst.poi.name}</div>`;
+  $('#rr-route').innerHTML = html;
+  const cap = $('#rr-cap');
+  cap.hidden = false;
+  const bfs = S.lanes[0].result;
+  if (RR.obj === 'time' && bfs && rrTotal(bfs) > rrTotal(r) + 1e-9){
+    cap.className = 'caption warn';
+    cap.innerHTML = `BFS found the fewest stops (${bfs.stops}) but ${rrTotal(bfs).toFixed(0)} min door-to-door.
+      ${w.name} chose ${r.stops} stops for ${rrTotal(r).toFixed(0)} min — <b>more stops, faster journey</b>.
+      Fewest stops ≠ fastest.`;
+  } else if (RR.obj === 'stops'){
+    cap.className = 'caption good';
+    cap.textContent = 'All three agree on the minimum stop count — BFS is provably optimal here, and Dijkstra/A* match it.';
+  } else if (RR.obj === 'transfers'){
+    cap.className = 'caption good';
+    cap.textContent = `Minimum transfers: ${r.transfers}. BFS still minimizes stops — watch it take a different route.`;
+  } else {
+    cap.className = 'caption good';
+    cap.textContent = `${w.name} wins at ${rrTotal(r).toFixed(0)} min door-to-door. A* matched Dijkstra's optimum while settling fewer states.`;
+  }
+}
+function rrUpdateTable(S){
+  const w = S.winner;
+  for (const l of S.lanes){
+    const val = $('#rr-val-'+l.key), fill = $('#rr-fill-'+l.key), row = $('#rr-row-'+l.key);
+    if (!val) continue;
+    if (l.result){
+      const r = l.result;
+      val.textContent = `${r.stops} stops · ${r.transfers}⇄ · ${rrTotal(r).toFixed(0)} min`;
+      val.style.color = l.color;
+      fill.style.width = '100%';
+    } else {
+      val.textContent = l.explored + ' settled';
+      fill.style.width = Math.min(100, l.explored/NS*100).toFixed(1) + '%';
+    }
+    row.classList.toggle('win', !!w && w.key === l.key);
+  }
+  const best = $('#rr-best'), sub = $('#rr-best-sub');
+  if (w){
+    best.textContent = RR.obj === 'stops' ? w.r.stops + ' stops'
+      : RR.obj === 'transfers' ? w.r.transfers + ' transfers'
+      : rrTotal(w.r).toFixed(0) + ' min';
+    sub.textContent = `${w.name} · ${NODE[RR.src].name} → ${rrDstName()} · ${OBJ_LABEL[RR.obj]}`;
+  } else { best.textContent = '…'; sub.textContent = `${NODE[RR.src].name} → ${rrDstName()} · ${OBJ_LABEL[RR.obj]}`; }
+}
+/* panel layout + projection */
+const NETB = (() => {
+  let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
+  const add = (lon,lat) => { const x=lon*KX, y=-lat;
+    if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y; };
+  for (const ring of D.island) for (const p of ring) add(p[0],p[1]);
+  for (const nd of NODE) add(nd.lon, nd.lat);
+  return {minX,maxX,minY,maxY};
+})();
+function rrRects(){
+  const rects = [], m = 10, gap = 10;
+  if (CW >= 640){
+    const w = (CW - m*2 - gap*2)/3;
+    for (let i=0;i<3;i++) rects.push({x:m+i*(w+gap), y:m, w, h:CH-m*2});
+  } else {
+    const h = (CH - m*2 - gap*2)/3;
+    for (let i=0;i<3;i++) rects.push({x:m, y:m+i*(h+gap), w:CW-m*2, h});
+  }
+  return rects;
+}
+function rrProj(rect){
+  const pad = 8, head = 26;
+  const w = Math.max(20, rect.w-pad*2), h = Math.max(20, rect.h-head-pad*2);
+  const s = Math.min(w/(NETB.maxX-NETB.minX), h/(NETB.maxY-NETB.minY));
+  return { s, ox: rect.x+pad+(w-(NETB.maxX-NETB.minX)*s)/2 - NETB.minX*s,
+              oy: rect.y+head+pad+(h-(NETB.maxY-NETB.minY)*s)/2 - NETB.minY*s };
+}
+const rrPt = (lon,lat,p) => [p.ox+lon*KX*p.s, p.oy-lat*p.s];
+function drawRacePanel(S, lane, rect){
+  const p = rrProj(rect);
+  const isWin = S.winner && S.winner.key === lane.key;
+  ctx.save();
+  ctx.beginPath(); ctx.roundRect(rect.x, rect.y, rect.w, rect.h, 12);
+  ctx.fillStyle = 'rgba(8,14,30,.55)'; ctx.fill();
+  if (isWin){ ctx.shadowColor = lane.color; ctx.shadowBlur = 16; ctx.strokeStyle = lane.color; ctx.lineWidth = 1.6; }
+  else { ctx.strokeStyle = 'rgba(148,180,255,.16)'; ctx.lineWidth = 1; }
+  ctx.stroke(); ctx.shadowBlur = 0;
+  ctx.clip();
+  // island
+  ctx.beginPath();
+  for (const ring of D.island){
+    const q0 = rrPt(ring[0][0], ring[0][1], p); ctx.moveTo(q0[0], q0[1]);
+    for (let i=1;i<ring.length;i++){ const q = rrPt(ring[i][0], ring[i][1], p); ctx.lineTo(q[0],q[1]); }
+    ctx.closePath();
+  }
+  ctx.fillStyle = '#0f1d36'; ctx.fill();
+  ctx.strokeStyle = 'rgba(125,165,225,.22)'; ctx.lineWidth = .8; ctx.stroke();
+  // line edges
+  ctx.lineWidth = 1.1; ctx.globalAlpha = .38;
+  for (const [a,b,L] of NET.edges){
+    const A = rrPt(NODE[a].lon, NODE[a].lat, p), B = rrPt(NODE[b].lon, NODE[b].lat, p);
+    ctx.strokeStyle = NET.lines[L].color;
+    ctx.beginPath(); ctx.moveTo(A[0],A[1]); ctx.lineTo(B[0],B[1]); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  // stations: base, settled, wave
+  for (let i=0;i<NODE.length;i++){
+    const q = rrPt(NODE[i].lon, NODE[i].lat, p);
+    ctx.beginPath(); ctx.arc(q[0],q[1],1.4,0,7);
+    ctx.fillStyle = 'rgba(140,165,205,.4)'; ctx.fill();
+    if (lane.settled[i]){
+      ctx.beginPath(); ctx.arc(q[0],q[1],2.1,0,7);
+      ctx.fillStyle = lane.color; ctx.globalAlpha = .8; ctx.fill(); ctx.globalAlpha = 1;
+    }
+  }
+  for (const wv of lane.recent){
+    if (wv.age > .8) continue;
+    const q = rrPt(NODE[wv.st].lon, NODE[wv.st].lat, p);
+    ctx.beginPath(); ctx.arc(q[0],q[1],2.5+wv.age*11,0,7);
+    ctx.strokeStyle = lane.color; ctx.globalAlpha = .5*(1-wv.age/.8); ctx.lineWidth = 1.4;
+    ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  // winning path
+  if (lane.result){
+    const pts = lane.result.path.map(i => rrPt(NODE[i].lon, NODE[i].lat, p));
+    glowLine(pts, lane.color, 2.2, .95, false);
+  }
+  // origin / destination markers
+  const mark = (i, color, letter) => {
+    const q = rrPt(NODE[i].lon, NODE[i].lat, p);
+    ctx.beginPath(); ctx.arc(q[0],q[1],4.4,0,7);
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.shadowColor = color; ctx.shadowBlur = 8;
+    ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.font = '800 9px -apple-system, sans-serif'; ctx.fillStyle = color;
+    ctx.fillText(letter, q[0]+6, q[1]-5);
+  };
+  mark(RR.src, '#f5f7fa', 'A');
+  if (RR.dst.poi){
+    for (const [wi] of RR.dst.poi.walkIdx) mark(wi, 'rgba(251,113,133,.65)', '');
+    const q = rrPt(RR.dst.poi.lon, RR.dst.poi.lat, p);
+    ctx.font = '800 11px -apple-system, sans-serif'; ctx.fillStyle = COLORS.router;
+    ctx.shadowColor = COLORS.router; ctx.shadowBlur = 8;
+    ctx.fillText('★', q[0]-5, q[1]+4); ctx.shadowBlur = 0;
+  } else mark(RR.dst.station, COLORS.router, 'B');
+  // header
+  ctx.font = '800 12.5px -apple-system, "Segoe UI", sans-serif';
+  ctx.fillStyle = lane.color; ctx.fillText(lane.name, rect.x+10, rect.y+17);
+  const nameW = ctx.measureText(lane.name).width;
+  ctx.font = '600 9.5px -apple-system, sans-serif'; ctx.fillStyle = 'rgba(143,162,194,.9)';
+  ctx.fillText(lane.tag, rect.x+10+nameW+8, rect.y+17);
+  ctx.textAlign = 'right';
+  ctx.font = '700 10px -apple-system, sans-serif';
+  ctx.fillStyle = lane.result ? lane.color : 'rgba(143,162,194,.9)';
+  ctx.fillText(lane.result
+    ? `${lane.result.stops} stops · ${rrTotal(lane.result).toFixed(0)} min · ${lane.result.explored} settled`
+    : lane.explored + ' settled', rect.x+rect.w-10, rect.y+17);
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+SCENES[6] = {
+  statsHTML(){
+    return `<h3>Route race &middot; <span id="rr-obj-label">${OBJ_LABEL[RR.obj]}</span></h3>
+    <div class="big-stat" id="rr-best" style="color:var(--router)">…</div>
+    <div class="stat-sub" id="rr-best-sub"></div>
+    <div id="rr-table">
+      ${LANE_META.map(l => `<div class="rr-row" id="rr-row-${l.key}">
+        <span class="rname" style="color:${l.color}">${l.name}</span>
+        <div class="rtrack"><div class="rfill" id="rr-fill-${l.key}" style="background:${l.color}"></div></div>
+        <span class="rval" id="rr-val-${l.key}">0 settled</span></div>`).join('')}
+    </div>
+    <div class="caption" id="rr-cap" hidden></div>
+    <h3 style="margin-top:14px">Winning route</h3>
+    <div id="rr-route"><span class="stat-sub">race in progress…</span></div>`;
+  },
+  controlsHTML(){
+    const stOpts = NODE.map((nd,i) => `<option value="${i}">${nd.name}</option>`).join('');
+    return `<div class="ctl-col"><label for="rr-preset">Preset journey</label>
+      <select id="rr-preset" class="rr-select">
+        ${NET.journeys.map((j,i) => `<option value="${i}">${j.from} → ${j.to}</option>`).join('')}
+        <option value="-1">Custom…</option>
+      </select></div>
+    <div class="ctl-col"><label for="rr-src">From</label>
+      <select id="rr-src" class="rr-select">${stOpts}</select></div>
+    <div class="ctl-col"><label for="rr-dst">To</label>
+      <select id="rr-dst" class="rr-select">
+        <optgroup label="Points of interest (incl. walk)">
+          ${NET.pois.map((p,i) => `<option value="poi:${i}">${p.name}</option>`).join('')}
+        </optgroup>
+        <optgroup label="Stations">${stOpts}</optgroup>
+      </select></div>
+    <div class="ctl-col"><label>Objective</label>
+      <div class="seg-btns">
+        <button class="seg${RR.obj==='stops'?' active':''}" id="rr-obj-stops">Fewest stops</button>
+        <button class="seg${RR.obj==='time'?' active':''}" id="rr-obj-time">Fastest</button>
+        <button class="seg${RR.obj==='transfers'?' active':''}" id="rr-obj-transfers">Fewest transfers</button>
+      </div></div>
+    <div class="ctl-row"><label for="rr-hop">hop time</label>
+      <input type="range" id="rr-hop" min="1" max="4" step="0.25" value="${RR.hopMin}" style="flex:1">
+      <output id="rr-hop-out">${RR.hopMin} min</output></div>
+    <div class="ctl-row"><label for="rr-xfer">transfer</label>
+      <input type="range" id="rr-xfer" min="0" max="10" step="0.5" value="${RR.xferMin}" style="flex:1">
+      <output id="rr-xfer-out">${RR.xferMin} min</output></div>
+    <div class="caption">Estimated times, not live timings: uniform hop + transfer penalty; walk legs curated.
+      LRT excluded. Routing is deterministic — no seed needed.</div>`;
+  },
+  make(){
+    setTicker(0);
+    const lanes = LANE_META.map(l => ({
+      ...l, settled: new Uint8Array(NODE.length), recent: [], explored: 0, result: null, cur: null,
+      gen: l.key === 'bfs' ? bfsGen(RR.src, RR.dst, RR.hopMin, RR.xferMin)
+        : wsearchGen(l.key === 'dij' ? 'dijkstra' : 'astar', RR.src, RR.dst, RR.obj, RR.hopMin, RR.xferMin),
+    }));
+    return { phase:'race', acc:0, lanes, winner:null };
+  },
+  pull(S){
+    let allDone = true;
+    for (const l of S.lanes){
+      if (l.result) continue;
+      const r = l.gen.next();
+      if (r.done){ l.result = null; continue; }
+      const ev = r.value;
+      if (ev.type === 'settle'){
+        l.settled[ev.st] = 1; l.explored = ev.explored; l.cur = ev.st;
+        l.recent.push({st:ev.st, age:0});
+        if (l.recent.length > 40) l.recent.shift();
+        allDone = false;
+      } else if (ev.type === 'done'){ l.result = ev; l.cur = null; }
+      else allDone = false;
+    }
+    if (S.lanes.every(l => l.result)){
+      S.phase = 'done';
+      S.winner = rrWinner(S);
+      setTicker(rrTotal(S.winner.r));
+      rrRenderRoute(S);
+    }
+    return allDone;
+  },
+  update(S, dt){
+    if (S.phase === 'race'){
+      S.acc += dt * G.speed * 26;
+      let guard = 0;
+      while (S.acc >= 1 && S.phase === 'race' && guard++ < 40){ this.pull(S); S.acc -= 1; }
+    }
+    for (const l of S.lanes){ for (const wv of l.recent) wv.age += dt; }
+    rrUpdateTable(S);
+    statusText(S.phase === 'race'
+      ? `racing · ${OBJ_LABEL[RR.obj]} · ${NODE[RR.src].name} → ${rrDstName()}`
+      : `${S.winner.name} wins · ${RR.obj === 'stops' ? S.winner.r.stops+' stops' : rrTotal(S.winner.r).toFixed(0)+' min'} · A* settled ${S.lanes[2].result.explored} vs Dijkstra ${S.lanes[1].result.explored}`);
+  },
+  stepOnce(S){ if (S.phase === 'race') this.pull(S); },
+  draw(S){
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.clearRect(0,0,CW,CH);
+    const g = ctx.createLinearGradient(0,0,0,CH);
+    g.addColorStop(0,'#081124'); g.addColorStop(1,'#050b18');
+    ctx.fillStyle = g; ctx.fillRect(0,0,CW,CH);
+    const rects = rrRects();
+    S.lanes.forEach((l,i) => drawRacePanel(S, l, rects[i]));
+  },
+  bind(){
+    rrSyncSelects();
+    $('#rr-preset').onchange = (e) => {
+      const v = +e.target.value;
+      if (v >= 0){
+        const j = NET.journeys[v];
+        RR.src = NIDX[j.from];
+        const pi = NET.pois.findIndex(p => p.name === j.to);
+        RR.dst = pi >= 0 ? {poi:NET.pois[pi]} : {station:NIDX[j.to]};
+        RR.preset = v;
+      } else RR.preset = -1;
+      rrSyncSelects(); resetRun(true);
+    };
+    $('#rr-src').onchange = (e) => { RR.src = +e.target.value; RR.preset = -1; rrSyncSelects(); resetRun(true); };
+    $('#rr-dst').onchange = (e) => {
+      const v = e.target.value;
+      RR.dst = v.startsWith('poi:') ? {poi:NET.pois[+v.slice(4)]} : {station:+v.slice(3)};
+      RR.preset = -1; rrSyncSelects(); resetRun(true);
+    };
+    for (const obj of ['stops','time','transfers']){
+      $('#rr-obj-'+obj).onclick = () => {
+        RR.obj = obj;
+        document.querySelectorAll('.seg-btns .seg').forEach(b => b.classList.toggle('active', b.id === 'rr-obj-'+obj));
+        $('#rr-obj-label').textContent = OBJ_LABEL[obj];
+        resetRun(true);
+      };
+    }
+    $('#rr-hop').oninput = (e) => { RR.hopMin = +e.target.value; $('#rr-hop-out').textContent = RR.hopMin+' min'; resetRun(true); };
+    $('#rr-xfer').oninput = (e) => { RR.xferMin = +e.target.value; $('#rr-xfer-out').textContent = RR.xferMin+' min'; resetRun(true); };
+  },
+};
+/* ---------------- engine ---------------- */
+function isDone(S){
+  if (!S) return false;
+  if (G.scene === 6) return S.phase === 'done';
+  return G.scene === 5 ? S.phase === 'board' : !!S.done;
+}
+function updatePlayBtn(){
+  const b = $('#btn-play');
+  b.innerHTML = G.playing ? '&#10074;&#10074;' : '&#9654;';
+  b.classList.toggle('playing', G.playing);
+}
+function togglePlay(force){
+  G.playing = force != null ? force : !G.playing;
+  updatePlayBtn();
+}
+function resetRun(keepPlaying){
+  $('#scene-stats').innerHTML = SCENES[G.scene].statsHTML();
+  G.S = SCENES[G.scene].make();
+  if (!keepPlaying) G.playing = false;
+  updatePlayBtn();
+}
+function switchScene(k, autoplay){
+  G.scene = k;
+  document.querySelectorAll('.scene-tab').forEach(t =>
+    t.classList.toggle('active', +t.dataset.scene === k));
+  document.documentElement.style.setProperty('--accent', SCENE_COLOR[k]);
+  $('#explainer').innerHTML = EXPLAIN[k].html + `<span class="cx">${EXPLAIN[k].cx}</span>`;
+  $('#ticker-label').innerHTML = k === 6
+    ? 'estimated journey time &middot; hop + transfer model, not live timings'
+    : 'tour length &middot; straight-line, as the crow flies';
+  $('#map-hint').textContent = k === 6
+    ? 'click station: set origin · shift-click: destination'
+    : 'click map: add city · click city: remove';
+  $('#city-slider').disabled = k === 6;
+  $('#seed').disabled = k === 6;
+  $('#scene-controls').innerHTML = SCENES[k].controlsHTML();
+  SCENES[k].bind();
+  resetRun(false);
+  if (autoplay) togglePlay(true);
+}
+let lastT = performance.now();
+function frame(now){
+  const dt = Math.min(0.1, Math.max(0, (now - lastT)/1000));
+  lastT = now; G.time += dt;
+  const sc = SCENES[G.scene];
+  if (G.S){
+    sc.update(G.S, G.playing ? dt : 0);
+    if (G.playing && isDone(G.S)) togglePlay(false);
+    SCENES[G.scene].draw(G.S);
+  }
+  // animated distance ticker
+  const tk = G.ticker;
+  tk.shown += (tk.target - tk.shown) * (1 - Math.exp(-dt*9));
+  if (Math.abs(tk.target - tk.shown) < 0.004) tk.shown = tk.target;
+  const el = $('#ticker');
+  el.innerHTML = tk.shown.toFixed(2) + '<span class="unit">' + (G.scene === 6 ? 'min' : 'km') + '</span>';
+  el.style.color = SCENE_COLOR[G.scene];
+  requestAnimationFrame(frame);
+}
+
+/* ---------------- interactions ---------------- */
+let toastTimer = null;
+function toast(msg){
+  const t = $('#toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+function currentTour(){
+  const S = G.S;
+  if (!S || G.scene === 6) return null;
+  if (G.scene === 1) return S.best || S.cand;
+  if (G.scene === 2) return S.tour || (S.path.length > 1 ? S.path : null);
+  return S.tour || null;
+}
+function netHit(x, y){
+  const rect = rrRects()[0], p = rrProj(rect);
+  let best = null;
+  for (let i=0;i<NODE.length;i++){
+    const q = rrPt(NODE[i].lon, NODE[i].lat, p);
+    const d = Math.hypot(x-q[0], y-q[1]);
+    if (d < 12 && (!best || d < best.d)) best = { i, d };
+  }
+  return best;
+}
+function cityHit(x, y){
+  let best = null;
+  for (let i=0;i<G.n;i++){
+    const [cx,cy] = toScreen(G.cities[i].lon, G.cities[i].lat);
+    const d = Math.hypot(x-cx, y-cy);
+    if (d < 14 && (!best || d < best.d)) best = { i, d };
+  }
+  return best;
+}
+canvas.addEventListener('mousemove', (e) => {
+  const r = canvas.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  const tt = $('#tooltip');
+  if (G.scene === 6){
+    const hit = netHit(x, y);
+    if (hit){
+      const nd = NODE[hit.i];
+      tt.innerHTML = `<div class="tt-name">${nd.name}</div><div class="tt-sub">${nd.codes.join(' / ')} · click: origin · shift-click: destination</div>`;
+      tt.hidden = false;
+      tt.style.left = clamp(x+14, 4, CW-180)+'px';
+      tt.style.top = clamp(y+14, 4, CH-52)+'px';
+      canvas.style.cursor = 'pointer';
+    } else { tt.hidden = true; canvas.style.cursor = 'crosshair'; }
+    return;
+  }
+  const hit = cityHit(x, y);
+  if (hit){
+    const c = G.cities[hit.i];
+    tt.innerHTML = `<div class="tt-name">${c.name}</div><div class="tt-sub">${c.codes ? c.codes.join(' / ') : c.code}${c.custom ? ' · custom city' : ' · MRT station'}</div>`;
+    tt.hidden = false;
+    tt.style.left = clamp(x+14, 4, CW-180)+'px';
+    tt.style.top = clamp(y+14, 4, CH-52)+'px';
+    canvas.style.cursor = 'pointer';
+    return;
+  }
+  const eh = edgeHit(x, y, currentTour());
+  if (eh){
+    tt.innerHTML = `<div class="tt-name">${G.cities[eh.a].name} ↔ ${G.cities[eh.b].name}</div><div class="tt-sub">${eh.km.toFixed(2)} km · straight-line</div>`;
+    tt.hidden = false;
+    tt.style.left = clamp(x+14, 4, CW-180)+'px';
+    tt.style.top = clamp(y+14, 4, CH-52)+'px';
+    canvas.style.cursor = 'crosshair';
+    return;
+  }
+  tt.hidden = true;
+  canvas.style.cursor = 'crosshair';
+});
+canvas.addEventListener('mouseleave', () => { $('#tooltip').hidden = true; });
+canvas.addEventListener('click', (e) => {
+  const r = canvas.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  if (G.scene === 6){
+    const hit = netHit(x, y);
+    if (!hit) return;
+    if (e.shiftKey){ RR.dst = {station:hit.i}; toast(`Destination: ${NODE[hit.i].name}`); }
+    else { RR.src = hit.i; toast(`Origin: ${NODE[hit.i].name}`); }
+    RR.preset = -1; rrSyncSelects(); resetRun(true);
+    return;
+  }
+  const hit = cityHit(x, y);
+  if (hit){
+    if (G.n <= MIN_CITIES){ toast(`Minimum ${MIN_CITIES} cities — remove nothing below that`); return; }
+    const name = G.cities[hit.i].name;
+    const list = G.cities.filter((_,i) => i !== hit.i);
+    setCities(list, true);
+    toast(`Removed ${name}`);
+    return;
+  }
+  if (G.n >= MAX_CITIES){ toast(`Maximum ${MAX_CITIES} cities for this demo`); return; }
+  const [lon, lat] = fromScreen(x, y);
+  G.customCount++;
+  const list = G.cities.concat([{ code:'C'+G.customCount, name:'Custom '+G.customCount, lat, lon, custom:true }]);
+  setCities(list, true);
+  toast(`Added Custom ${G.customCount} — haversine distances computed live`);
+});
+$('#btn-play').onclick = () => togglePlay();
+$('#btn-step').onclick = () => SCENES[G.scene].stepOnce(G.S);
+$('#btn-reset').onclick = () => resetRun(false);
+$('#speed').oninput = (e) => {
+  G.speed = Math.pow(2, parseFloat(e.target.value));
+  $('#speed-out').textContent = G.speed.toFixed(2).replace(/\.?0+$/,'') + '×';
+};
+$('#city-slider').oninput = (e) => setCities(citiesFromSlider(+e.target.value), true);
+$('#seed').onchange = (e) => {
+  G.seed = (parseInt(e.target.value, 10) || 0) >>> 0;
+  e.target.value = G.seed;
+  resetRun(true);
+  toast(`Seed ${G.seed} — same seed + same cities ⇒ identical run`);
+};
+document.querySelectorAll('.scene-tab').forEach(t =>
+  t.onclick = () => switchScene(+t.dataset.scene, true));
+window.addEventListener('keydown', (e) => {
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+  if (e.code === 'Space'){ e.preventDefault(); togglePlay(); }
+  else if (e.key === 'ArrowRight'){ e.preventDefault(); SCENES[G.scene].stepOnce(G.S); }
+  else if (e.key >= '1' && e.key <= '6') switchScene(+e.key, true);
+  else if (e.key === 'r' || e.key === 'R') resetRun(false);
+});
+
+/* ---------------- self-tests (?test=1) ---------------- */
+function runTests(){
+  const groups = [];
+  const T = (name, fn) => {
+    try { const r = fn(); groups.push({ name, pass: !!r.pass, detail: r.detail || '' }); }
+    catch (err){ groups.push({ name, pass:false, detail:String(err.message || err).slice(0,160) }); }
+  };
+  const sample = (n, seed) => {
+    const idx = shuffledTour(D.stations.length, mulberry32(seed)).slice(0, n);
+    return idx.map(i => D.stations[i]);
+  };
+  T('1 · tour validity — every algorithm outputs a permutation', () => {
+    const cs = sample(8, 7), M = buildMatrix(cs), n = 8;
+    const tours = [
+      drain(bruteGen(M, n)).tour,
+      nnFrom(M, n, 0),
+      drain(twoOptGen(M, n, shuffledTour(n, mulberry32(11)))).tour,
+      drain(saGen(M, n, shuffledTour(n, mulberry32(12)), mulberry32(13), 10, .99, .02)).tour,
+      drain(hkGen(M, n, 0)).tour,
+    ];
+    const ok = tours.every(t => isPermutation(t, n));
+    return { pass: ok, detail: ok ? 'brute / NN / 2-opt / SA / HK all valid' : 'invalid permutation found' };
+  });
+  T('2 · brute force ≡ Held–Karp (n=6,7,8 × 3 seeds)', () => {
+    let worst = 0, checks = 0;
+    for (const n of [6,7,8]) for (const seed of [1,2,3]){
+      const cs = sample(n, seed), M = buildMatrix(cs);
+      const b = drain(bruteGen(M, n)), h = drain(hkGen(M, n, 0));
+      const dh = Math.abs(tourCost(h.tour, M) - h.cost);
+      worst = Math.max(worst, Math.abs(b.cost - h.cost), dh);
+      if (!isPermutation(h.tour, n)) return { pass:false, detail:'HK tour invalid' };
+      checks++;
+    }
+    return { pass: worst < 1e-9, detail: `${checks} comparisons · max Δ ${worst.toExponential(2)} km` };
+  });
+  T('3 · 2-opt monotone + no improving move at the end', () => {
+    const cs = sample(12, 42), M = buildMatrix(cs), n = 12;
+    const t0 = shuffledTour(n, mulberry32(42));
+    let last = tourCost(t0, M), swaps = 0, mono = true;
+    const gen = twoOptGen(M, n, t0);
+    let final = null;
+    for (const ev of gen){
+      if (ev.type === 'swap'){ if (ev.newCost > last + 1e-9) mono = false; last = ev.newCost; swaps++; }
+      else if (ev.type === 'done') final = ev;
+    }
+    const improving = final ? twoOptImprove(M, final.tour) : null;
+    const ok = mono && swaps > 0 && final && improving === null && Math.abs(last - final.cost) < 1e-9;
+    return { pass: ok, detail: `${swaps} swaps · monotone ${mono} · improving move left: ${improving ? improving.delta.toFixed(4) : 'none'}` };
+  });
+  T('4 · annealing improves + acceptance math = exp(−Δ/T)', () => {
+    const cs = D.defaults, M = buildMatrix(cs), n = cs.length;
+    const t0 = shuffledTour(n, mulberry32((42 ^ 0xc2b2ae35) >>> 0));
+    const init = tourCost(t0, M);
+    const sa = drain(saGen(M, n, t0, mulberry32((42 ^ 0x27d4eb2f) >>> 0), 10, .995, .02));
+    const p1 = saProb(0, 5) === 1 && saProb(-3, 5) === 1;
+    const p2 = Math.abs(saProb(2, 4) - Math.exp(-0.5)) < 1e-12;
+    const p3 = saAccept(2, 4, 0.5) === (0.5 < Math.exp(-0.5)) && saAccept(2, 4, 0) && !saAccept(2, 4, 1);
+    const ok = sa.cost <= init + 1e-9 && p1 && p2 && p3;
+    return { pass: ok, detail: `init ${init.toFixed(2)} → final ${sa.cost.toFixed(2)} km · prob checks ${p1&&p2&&p3}` };
+  });
+  T('5 · haversine sanity (known cross-island pairs)', () => {
+    const je = D.stations.find(s => s.name === 'Jurong East');
+    const cg = D.stations.find(s => s.name === 'Changi Airport');
+    const bl = D.stations.find(s => s.name === 'Boon Lay');
+    const d1 = haversine(je.lat, je.lon, cg.lat, cg.lon);
+    const d1r = haversine(cg.lat, cg.lon, je.lat, je.lon);
+    const d2 = haversine(bl.lat, bl.lon, cg.lat, cg.lon);
+    const self = haversine(je.lat, je.lon, je.lat, je.lon);
+    // JE<->CG true great-circle ≈ 27.5 km; Boon Lay<->CG ≈ 31.5 km (30–35 band).
+    const ok = d1 >= 27 && d1 <= 28.5 && d2 >= 30 && d2 <= 35
+      && Math.abs(d1-d1r) < 1e-12 && self === 0;
+    return { pass: ok, detail: `JE↔CG ${d1.toFixed(3)} km · BL↔CG ${d2.toFixed(3)} km · symmetry Δ ${Math.abs(d1-d1r).toExponential(1)} · self ${self}` };
+  });
+  T('6 · determinism — same seed ⇒ identical move sequences', () => {
+    const cs = sample(10, 99), M = buildMatrix(cs), n = 10;
+    const sig2 = () => {
+      const g = twoOptGen(M, n, shuffledTour(n, mulberry32(555)));
+      const out = [];
+      for (const ev of g) if (ev.type === 'swap') out.push(ev.i + ':' + ev.j + ':' + ev.newCost.toFixed(9));
+      return out.join('|');
+    };
+    const sigSA = () => {
+      const g = saGen(M, n, shuffledTour(n, mulberry32(556)), mulberry32(557), 8, .99, .02);
+      const out = [];
+      for (const ev of g) if (ev.type === 'move') out.push(ev.k + ':' + ev.delta.toFixed(9) + ':' + ev.accept);
+      return out.join('|');
+    };
+    const a = sig2(), b = sig2(), c = sigSA(), d = sigSA();
+    const ok = a === b && c === d && a.length > 0 && c.length > 0;
+    return { pass: ok, detail: `2-opt ${a.split('|').length} swaps identical · SA ${c.split('|').length} moves identical` };
+  });
+  T('7 · (n−1)!/2 counter matches enumerated distinct tours', () => {
+    const cs5 = sample(5, 3), cs6 = sample(6, 4);
+    const c5 = drain(bruteGen(buildMatrix(cs5), 5)).count;
+    const c6 = drain(bruteGen(buildMatrix(cs6), 6)).count;
+    const ok = c5 === 12 && c6 === 60 && distinctTours(5) === 12 && distinctTours(6) === 60;
+    return { pass: ok, detail: `n=5 → ${c5} (expect 12) · n=6 → ${c6} (expect 60)` };
+  });
+  T('8 · router: BFS stop-optimality, Dijkstra ≡ A*, monotone penalties, determinism', () => {
+    const pairs = [['Kovan','Shenton Way'],['Woodlands','Changi Airport'],['Jurong East','Marina Bay']];
+    let ok = true, worst = 0;
+    for (const [a,b] of pairs){
+      const src = NIDX[a], dst = {station:NIDX[b]};
+      const bf = drain(bfsGen(src, dst, 2, 4));
+      const dj = drain(wsearchGen('dijkstra', src, dst, 'time', 2, 4));
+      const as = drain(wsearchGen('astar', src, dst, 'time', 2, 4));
+      worst = Math.max(worst, Math.abs(dj.cost - as.cost));
+      ok = ok && bf.stops <= dj.stops && Math.abs(dj.cost - as.cost) < 1e-9 && as.explored <= dj.explored;
+      ok = ok && dj.path[0] === src && dj.path[dj.path.length-1] === dst.station;
+      for (let i=1;i<dj.path.length;i++) ok = ok && ADJ[dj.path[i-1]].some(e => e.to === dj.path[i]);
+      for (let i=1;i<bf.path.length;i++) ok = ok && ADJ[bf.path[i-1]].some(e => e.to === bf.path[i]);
+    }
+    const bf9 = drain(bfsGen(NIDX['Kovan'], {station:NIDX['Raffles Place']}, 2, 4));
+    ok = ok && bf9.stops === 9;
+    // the close fight: door-to-door optimum beats the fewest-stops route
+    const poi = {poi:NET.pois[0]};
+    const bfP = drain(bfsGen(NIDX['Kovan'], poi, 2, 4));
+    const djP = drain(wsearchGen('dijkstra', NIDX['Kovan'], poi, 'time', 2, 4));
+    ok = ok && djP.minutes + djP.walk <= bfP.minutes + bfP.walk + 1e-9;
+    // raising the transfer penalty never lowers the optimal cost
+    const c0 = drain(wsearchGen('dijkstra', NIDX['Kovan'], poi, 'time', 2, 0)).cost;
+    const c8 = drain(wsearchGen('dijkstra', NIDX['Kovan'], poi, 'time', 2, 8)).cost;
+    ok = ok && c8 >= c0 - 1e-9;
+    const sig = () => {
+      const g = wsearchGen('astar', NIDX['Kovan'], poi, 'time', 2, 4), o = [];
+      for (const ev of g) if (ev.type === 'settle') o.push(ev.state + ':' + ev.cost.toFixed(6));
+      return o.join('|');
+    };
+    ok = ok && sig() === sig();
+    return { pass: ok, detail: `3 OD pairs · max Δ(Dij,A*) ${worst.toExponential(2)} min · Kovan→Raffles Pl ${bf9.stops} stops · door-to-door ${djP.minutes+djP.walk} vs BFS ${bfP.minutes+bfP.walk} min` };
+  });
+  const passed = groups.filter(g => g.pass).length;
+  console.log('%cTSP Theater self-test', 'font-weight:bold;font-size:14px');
+  console.table(groups.map(g => ({ group: g.name, result: g.pass ? 'PASS' : 'FAIL', detail: g.detail })));
+  const badge = $('#test-badge');
+  badge.hidden = false;
+  badge.textContent = `self-test ${passed}/${groups.length} ${passed === groups.length ? 'PASS' : 'FAIL'}`;
+  badge.className = passed === groups.length ? 'pass' : 'fail';
+  badge.onclick = () => console.table(groups.map(g => ({ group:g.name, result:g.pass?'PASS':'FAIL', detail:g.detail })));
+  window.__tsp.testResults = groups;
+  return groups;
+}
+
+/* ---------------- public hooks (showcase / tests) ---------------- */
+window.__tsp = {
+  G, SCENES, COLORS, NET, NODE, NIDX, RR,
+  state: () => ({ scene:G.scene, n:G.n, seed:G.seed, playing:G.playing, speed:G.speed,
+    ticker:G.ticker.target, done:isDone(G.S),
+    swaps: G.S && G.S.swaps, moves: G.S && G.S.kTotal, phase: G.S && G.S.phase,
+    checked: G.S && G.S.checked, total: G.S && G.S.total,
+    board: G.S && G.S.board ? G.S.board.rows.map(r => ({ key:r.key, km:r.km, gapLabel:r.gapLabel })) : null,
+    rr: G.scene === 6 && G.S ? { obj:RR.obj, src:NODE[RR.src].name, dst:rrDstName(),
+      winner: G.S.winner && G.S.winner.key,
+      winnerTotal: G.S.winner ? rrTotal(G.S.winner.r) : null,
+      lanes: G.S.lanes.map(l => ({ key:l.key, explored:l.explored,
+        result: l.result ? { stops:l.result.stops, transfers:l.result.transfers,
+          minutes:l.result.minutes, walk:l.result.walk, total:rrTotal(l.result), explored:l.result.explored } : null })) } : null }),
+  setScene: (k) => switchScene(k, true),
+  setCities: (k) => setCities(citiesFromSlider(k), true),
+  setSeed: (s) => { G.seed = s >>> 0; $('#seed').value = G.seed; resetRun(true); },
+  play: () => togglePlay(true),
+  pause: () => togglePlay(false),
+  step: () => SCENES[G.scene].stepOnce(G.S),
+  reset: () => resetRun(false),
+  finish: () => {
+    const sc = SCENES[G.scene];
+    let guard = 0;
+    while (!isDone(G.S) && guard++ < 300000){ sc.stepOnce(G.S); sc.update(G.S, 0); }
+    sc.update(G.S, 0);
+    return isDone(G.S);
+  },
+  algorithms: { bruteGen, nnFrom, nnGen, twoOptGen, twoOptImprove, saGen, saProb, saAccept,
+    hkGen, buildBoard, shuffledTour, mulberry32, tourCost, buildMatrix, haversine, distinctTours, isPermutation,
+    bfsGen, wsearchGen, pathStats },
+  cityScreen: (i) => toScreen(G.cities[i].lon, G.cities[i].lat),
+  netScreen: (i) => { const p = rrProj(rrRects()[0]); return rrPt(NODE[i].lon, NODE[i].lat, p); },
+  setJourney: (srcName, dstName) => {
+    RR.src = NIDX[srcName];
+    const pi = NET.pois.findIndex(p => p.name === dstName);
+    RR.dst = pi >= 0 ? {poi:NET.pois[pi]} : {station:NIDX[dstName]};
+    RR.preset = NET.journeys.findIndex(j => j.from === srcName && j.to === dstName);
+    rrSyncSelects(); resetRun(true);
+  },
+  setObj: (obj) => { RR.obj = obj; resetRun(true); },
+  testResults: null,
+};
+
+/* ---------------- init ---------------- */
+function init(){
+  resize();
+  G.cities = citiesFromSlider(12);
+  G.n = G.cities.length;
+  G.M = buildMatrix(G.cities);
+  computeProjection();
+  switchScene(3, true);   // open on the money shot: 2-opt untangling itself
+  requestAnimationFrame(frame);
+  if (new URLSearchParams(location.search).get('test') === '1'){
+    setTimeout(runTests, 400);
+  }
+}
+new ResizeObserver(() => resize()).observe($('#stage-box'));
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+else init();
+</script>
+</body>
+</html>

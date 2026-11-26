@@ -1,0 +1,8 @@
+# Render intermediates: screencast frames, narration WAVs, silent/mixed audio (~554 MB)
+showcase-out/render/
+# Headless smoke screenshots (regenerable via scripts/smoke.mjs)
+showcase-out/smoke/
+# OS / editor noise
+.DS_Store
+__pycache__/
+*.pyc

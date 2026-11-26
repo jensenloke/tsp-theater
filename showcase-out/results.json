@@ -1,0 +1,38 @@
+[
+  {
+    "name": "01-opening",
+    "ok": true
+  },
+  {
+    "name": "02-explosion",
+    "ok": true
+  },
+  {
+    "name": "03-greedy",
+    "ok": true
+  },
+  {
+    "name": "04-twoopt",
+    "ok": true
+  },
+  {
+    "name": "05-annealing",
+    "ok": true
+  },
+  {
+    "name": "06-exact",
+    "ok": true
+  },
+  {
+    "name": "07-leaderboard",
+    "ok": true
+  },
+  {
+    "name": "08-router",
+    "ok": true
+  },
+  {
+    "name": "09-selftest",
+    "ok": true
+  }
+]
